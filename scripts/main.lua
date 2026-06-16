@@ -122,7 +122,7 @@ local configDefinition = {
 				{ widgetType = "text", wrapped = true, label = "Use Slot Items: D-Pad + Left Stick Up/Down/Left/Right", },
 				{ widgetType = "text", wrapped = true, label = "Use Slot 1 specifically: Left Trigger near mouth", },
 				{ widgetType = "text", wrapped = true, label = "Menu: Press left Menu button", },
-				{ widgetType = "text", wrapped = true, label = "Inventory: Hold left Menu button (2 seconds) OR Light Trigger with your hand over your left shoulder", },
+				{ widgetType = "text", wrapped = true, label = "Inventory: Hold left Menu button (2 seconds) OR Left Trigger with your hand over your left shoulder", },
 				{ widgetType = "text", wrapped = true, label = "Interact with overlay screens: Right Trigger", },
 				{ widgetType = "text", wrapped = true, label = "H key in overlay screens: DPad + Left Stick Down", },
                 {widgetType = "unindent", width = 10 },
