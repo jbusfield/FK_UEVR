@@ -12,6 +12,9 @@ local function getViewportSize()
 end
 
 local function projectWorldToScreen(worldLocation)
+    -- TODO try these instead
+    -- vr.get_ui_width()
+    -- vr.get_ui_height()
     local viewportWidth , viewportHeight = getViewportSize()
     if viewportWidth == 0 or viewportHeight == 0 then return false, 0, 0 end
 

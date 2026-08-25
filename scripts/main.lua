@@ -17,6 +17,7 @@ local mathLib = require('libs/core/math_lib')
 --local handsAnimation = require('libs/hands_animation')
 local mouse = require('libs/mouse')
 local tArray = require("libs/core/tarray")
+local plugin = require("libs/core/plugin")
 local keyboard = require("libs/keyboard")
 
 --uevrUtils.setLogLevel(LogLevel.Debug)
@@ -520,21 +521,38 @@ local function initializeInputMappings()
     inputMappings = {}
     --print("Initializing input mappings", inputSettings)
     if inputSettings ~= nil then
-        tArray.registerCallback(function(mappings)
-            --print("Received input mappings callback with mappings:", mappings)
-            for i, mappingData in ipairs(mappings) do
-                for key, value in pairs(mappingData) do
-                    if not mappingData["Key"]:match("^Gamepad_") then
-                        --print("Mapping found for key:", mappingData["KeyName"], mappingData["Key"])
-                        inputMappings[mappingData["KeyName"]] = inputMappingLookup[mappingData["Key"]]
-                        if inputMappings[mappingData["KeyName"]] == nil then
-                            inputMappings[mappingData["KeyName"]] = mappingData["Key"]
-                        end
-                    end
+        --deprecated
+        -- tArray.registerCallback(function(mappings)
+        --     --print("Received input mappings callback with mappings:", mappings)
+        --     for i, mappingData in ipairs(mappings) do
+        --         for key, value in pairs(mappingData) do
+        --             if not mappingData["Key"]:match("^Gamepad_") then
+        --                 --print("Mapping found for key:", mappingData["KeyName"], mappingData["Key"])
+        --                 inputMappings[mappingData["KeyName"]] = inputMappingLookup[mappingData["Key"]]
+        --                 if inputMappings[mappingData["KeyName"]] == nil then
+        --                     inputMappings[mappingData["KeyName"]] = mappingData["Key"]
+        --                 end
+        --             end
+        --         end
+        --     end
+        -- end, "FInputActionKeyMapping", inputSettings, "ActionMappings")
+
+        --plugin.showDebug = true
+        local result = plugin.getProperty(inputSettings, "ActionMappings")
+        for i, mappingData in ipairs(result) do
+            local gameKey = mappingData["Key"]["KeyName"]
+            if not gameKey:match("^Gamepad_") then
+                --print("Mapping found for key:", mappingData["KeyName"], mappingData["Key"])
+                inputMappings[mappingData["ActionName"]] = inputMappingLookup[gameKey]
+                if inputMappings[mappingData["ActionName"]] == nil then
+                    inputMappings[mappingData["ActionName"]] = gameKey
+                    print("Mapping found for key:", mappingData["ActionName"], gameKey)
                 end
             end
-        end, "FInputActionKeyMapping", inputSettings, "ActionMappings")
-    end
+        end
+
+        --print("Test Input Mapping CastSpell:",getInputMapping("CastSpell"))
+     end
 end
 
 local STICK_DEADZONE = 22000
