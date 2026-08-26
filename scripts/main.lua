@@ -660,7 +660,8 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
     keyboard.updateToggleState(state.Gamepad.sThumbLX < -20000, "A") -- left
     keyboard.updateToggleState(state.Gamepad.sThumbLX > 20000, "D") -- right
     keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_LEFT_SHOULDER), getInputMapping("CastSpell") or "Q") -- cast spells
-    keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_RIGHT_SHOULDER), getInputMapping("bLock") or "R") -- block/parry
+    --keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_RIGHT_SHOULDER), getInputMapping("bLock") or "R") -- block/parry
+    keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_RIGHT_SHOULDER), "RCLICK") -- block/parry
     keyboard.updateShortLongButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_X), "C", "T", "switchWeaponsButton", LONG_PRESS_SECONDS) --switch weapons
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_Y), "X") --change spell
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_DPAD_UP), getInputMapping("QuickbarOne") or "1") --use 1
@@ -685,24 +686,18 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
         end
     end
 
-    if status["hasSwipeRight"] then
-        --print("Processing right swipe gesture into input")
+    if status["hasSwipeRight"] or status["hasSwipeLeft"] then
+        local lclick = getInputMapping("PrimaryAction") or "LCLICK"
         if isPressingRightTrigger then
             state.Gamepad.bRightTrigger = 0
-            keyboard.setInput("KeyPress", getInputMapping("SecondaryAction") or "RCLICK")
+            keyboard.setInput("KeyDown", lclick)
+            delay(math.floor(LONG_PRESS_SECONDS * 1000), function()
+                keyboard.setInput("KeyUp", lclick)
+            end)
         else
-            keyboard.setInput("KeyPress", getInputMapping("PrimaryAction") or "LCLICK")
+            keyboard.setInput("KeyPress", lclick)
         end
         status["hasSwipeRight"] = false
-    end
-	if status["hasSwipeLeft"] then
-        --print("Processing left swipe gesture into input")
-        if isPressingRightTrigger then
-            state.Gamepad.bRightTrigger = 0
-            keyboard.setInput("KeyPress", getInputMapping("SecondaryAction") or "RCLICK")
-        else
-            keyboard.setInput("KeyPress", getInputMapping("PrimaryAction") or "LCLICK")
-        end
         status["hasSwipeLeft"] = false
     end
 
