@@ -1207,6 +1207,11 @@ local configDefinition = {
 		}
 	},
 }
+for j = 1, 3 do
+	for _, boneID in ipairs(handBones[j]) do
+		table.insert(configDefinition[1].layout, { widgetType = "input_text", id = boneID .. "_name", label = boneID .. "_name", initialValue = "", isHidden = true })
+	end
+end
 configui.create(configDefinition)
 
 local function setFinderBonesAdvanced(value)
@@ -1511,7 +1516,8 @@ local function updateHands()
 			if rot ~= nil then
 				hands.setOffset({X=0, Y=0, Z=0, Pitch=rot.X, Yaw=rot.Y, Roll=rot.Z})
 			end
-			hands.setIgnoreRelativeOffset(configui.getValue("ignore_relative_offset"))
+			hands.setIgnoreRelativeOffset(configui.getValue("mesh_rotation_ignore_relative"))
+			--hands.setIgnoreRelativeOffset(configui.getValue("ignore_relative_offset"))
 			hands.debug(getMeshComponent(), nil, nil, true)
 
 			local fovParam = configui.getValue("fov_param_name")
@@ -2217,6 +2223,14 @@ local function updateTestingAnimation()
 	end
 end
 
+
+for j = 1, 3 do
+	for _, boneID in ipairs(handBones[j]) do
+		configui.onUpdate(boneID, function(value)
+			configui.setValue(boneID .. "_name", bones["names"][value] or "")
+		end)
+	end
+end
 
 configui.onCreateOrUpdate("animation_finger_bones_advanced_checkbox", function(value)
 	setFinderBonesAdvanced(value)
@@ -3084,6 +3098,17 @@ print("Current Step",currentStep)
 		for j = 1, 3 do
 			for _, knuckleName in ipairs(handBones[j]) do
 				configui.setSelections(knuckleName, bones["names"])
+				local boneName = configui.getValue(knuckleName .. "_name")
+				if boneName ~= nil and boneName ~= "" then
+					for i, name in ipairs(bones["names"]) do
+						if name == boneName then
+							configui.setValue(knuckleName, i)
+							break
+						end
+					end
+				else
+					configui.setValue(knuckleName .. "_name", bones["names"][configui.getValue(knuckleName)] or "")
+				end
 			end
 		end
 		scanForKnuckleBonesUsingPattern("(ff)_(ii)_(h)")

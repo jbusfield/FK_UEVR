@@ -1,0 +1,250 @@
+-- FAILED EXPERIMENT. Do not load into the game.
+-- BeginAbility raises a native access violation; context initialization is unresolved.
+local melee = (function()
+    local M = {}
+    local active, previous, fault
+    local quiet, armed = 0, true
+    local function valid(o) return uevrUtils.getValid(o) end
+    local function read(o, key) return plugin.getProperty(o, key) end
+    local function write(o, key, value) plugin.setProperty(o, key, value) end
+    local function call(o, name, ...)
+        local result = plugin.executeFunction(o, name, ...)
+        assert(type(result) == 'table', name .. ' returned no bridge result')
+        return result
+    end
+    local function copy(value)
+        if type(value) ~= 'table' then return value end
+        local result = {}
+        for k, v in pairs(value) do
+            -- The bridge returns gameplay-tag map keys as structs.
+            if type(k) == 'table' then
+                assert(k.TagName, 'unsupported struct map key in weapon data')
+                k = tostring(k.TagName)
+            end
+            result[k] = copy(v)
+        end
+        return result
+    end
+    local function impactModule(modules)
+        for _, module in ipairs(modules or {}) do
+            if valid(module) and module:get_class():get_fname():to_string()
+                == 'SlasherAbilityModule_ImpactWeapon' then return module end
+        end
+    end
+    local function vector(v) return {X=v.X, Y=v.Y, Z=v.Z} end
+    local function setEnabled(window, enabled)
+        if not valid(window.module) then return end
+        for i=0, window.count-1 do
+            write(window.module, 'CollisionShapes[' .. i .. ']', {
+                bEnabled=enabled, bEnabled_Internal=enabled, bDisableNextTick=false})
+        end
+    end
+    function M.finish()
+        local window = active
+        active, previous, quiet = nil, nil, 0
+        if window then
+            pcall(setEnabled, window, false)
+            if valid(window.ability) then pcall(function() window.ability:End(true) end) end
+        end
+    end
+    local function fail(err)
+        M.finish()
+        if not fault then
+            fault = tostring(err)
+            uevr.params.functions.log_error('[FK contact melee] disabled: ' .. fault)
+        end
+    end
+    local function begin(player, weapon, enabled)
+        assert(valid(player) and valid(weapon), 'pawn or held weapon unavailable')
+        local component = valid(player.AbilityComponent)
+        assert(component, 'ability component unavailable')
+        local data = call(component, 'GetSingleAbilityDataOfTypeInCollection',
+            {TagName='Ability.Active.WeaponAttack.Single.Light'}, {}, {}).ReturnValue
+        assert(type(data) == 'table', 'equipped attack data unavailable')
+        local source = impactModule(data.ModuleObjects)
+        assert(source, 'equipped weapon has no native impact module')
+
+        -- Attempt to preserve the equipped-weapon data while replacing its modules.
+        -- This attempt also failed at BeginAbility; the cause is unresolved.
+        -- Construct and start synchronously so the temporary module cannot be
+        -- collected between ticks; the active ability owns the running copy.
+        local module = uevrUtils.spawn_object(
+            'Class /Script/SLASHER.SlasherAbilityModule_ImpactWeapon', component)
+        assert(valid(module), 'could not construct collision module')
+        for _, key in ipairs({
+            'ModuleData', 'ImpactPhysics', 'FactionConfig', 'bIgnoreBlock', 'Effects',
+            'ImpactTargetEffect', 'ImpactCasterEffect', 'Collision',
+            'bIncludeWeaponDamage', 'EquipSlotToWeaponParts',
+        }) do
+            local value = read(source, key)
+            assert(value ~= nil, 'missing weapon property ' .. key)
+            write(module, key, copy(value))
+        end
+        write(module, 'bUseAimingSocket', false)
+        write(module, 'bUseDefaultAimingSocket', false)
+        write(module, 'bEndAbilityIfAllShapesAreDisabled', false)
+        write(module, 'bDisableShapeOnImpact', false)
+        write(module, 'Collision.HitRate.MaxHitsPerActor', {Mode=0,Value=1,bIsInt=true})
+        write(module, 'Collision.bAllowMultiComponentHitsPerTick', false)
+        data.ModuleObjects = {module}
+        data.DurationPolicy = 1 -- fixed; no montage timing
+        data.Duration, data.OriginalDuration, data.DurationRemaining = 1.25, 1.25, 1.25
+        data.bCanTick, data.bTickDuration = true, true
+        data.Caster, data.Causer, data.CastingCharacter, data.CastingHero = player, player, player, player
+        data.CastingComponent = component
+        data.CasterSceneComp, data.CasterMeshComp = player.RootComponent, player.Mesh
+        data.CasterAnimInstance = player.AnimInstance
+        data.World = uevrUtils.getWorld()
+        data.CauserInput = {TagName='None'}
+        data.ItemAnimationData = {}
+        assert(read(module, 'bUseAimingSocket') == false, 'aiming override did not persist')
+
+        local ability = call(component, 'BeginAbility', {AbilityData=copy(data), Causer=player}).ReturnValue
+        assert(valid(ability), 'game rejected the collision-only ability')
+        active = {pawn=player,weapon=weapon,ability=ability,count=0,elapsed=0}
+        assert(not valid(ability:GetActiveAnimation()), 'unexpected animation in collision ability')
+        local runtimeData = read(ability, 'AbilityData')
+        assert(type(runtimeData) == 'table' and type(runtimeData.ModuleObjects) == 'table'
+            and #runtimeData.ModuleObjects == 1, 'unexpected runtime modules')
+        local runtime = impactModule(runtimeData.ModuleObjects)
+        assert(valid(runtime) and runtime:get_address() ~= source:get_address(),
+            'impact module is not private')
+        active.module = runtime
+        local shapes = read(runtime, 'CollisionShapes')
+        assert(type(shapes) == 'table' and #shapes > 0, 'native weapon shapes were not created')
+        active.count = #shapes
+        for i, shape in ipairs(shapes) do
+            local part = shape.WeaponPart and tostring(shape.WeaponPart.TagName) or ''
+            local slot = part:find('WeaponPart.Torch.',1,true)
+                and 'EquipmentSlot.Override.Hand.R.Torch' or 'EquipmentSlot.Hand.R'
+            local attach = {LocationMode=2,EquipSlot={TagName=slot},bCustomRotation=false}
+            write(runtime, 'CollisionShapes[' .. (i-1) .. ']', {
+                Attachment={
+                    bFollowCasterLocation=false,bFollowSocket=true,bAttachToCaster=false,
+                    InitialAttachment=attach,ConstantAttachment=attach,
+                },
+                VelocityType=0, -- ShapeMovement, rather than caster/target direction
+                bShapeStartAtCasterLocation=false,
+                bEnabled=enabled,bEnabled_Internal=enabled,bDisableNextTick=false,
+                SocketActivationData={StartTimes={},EndTimes={},NumberOfTimesteps={}},
+            })
+        end
+        local shape = read(runtime, 'CollisionShapes[0]')
+        assert(shape and shape.bEnabled == enabled and shape.bEnabled_Internal == enabled
+            and shape.Attachment.bFollowSocket, 'collision configuration did not persist')
+        return active
+    end
+
+    function M.update(player, weapon, dt, enabled)
+        if fault then return end
+        local ok, err = pcall(function()
+            if active and (not valid(active.pawn) or not valid(active.weapon)
+                or not valid(active.ability) or not valid(active.module)) then
+                M.finish()
+                return
+            end
+            if active and active.test then
+                local test = active.test
+                test.frame = test.frame + 1
+                if test.frame == 1 then
+                    write(active.module, 'CollisionShapes[0]', test.startShape)
+                elseif test.frame == 2 then
+                    write(active.module, 'CollisionShapes[0]', test.endShape)
+                else
+                    local shape = read(active.module, 'CollisionShapes[0]')
+                    local bones = {}
+                    for _, hit in ipairs(shape.SweepResults or {}) do
+                        bones[#bones+1] = tostring(hit.BoneName)
+                    end
+                    uevr.params.functions.log_info('[FK contact test] sweep finished; bones='
+                        .. table.concat(bones, ',') .. '; damage/reaction requires verification')
+                    M.finish()
+                end
+                return
+            end
+            if not enabled or not valid(player) or not valid(weapon) or dt <= 0 or dt > 0.1 then
+                M.finish()
+                armed = true
+                return
+            end
+            if active and (not valid(active.ability) or not valid(active.pawn)
+                or active.pawn:get_address() ~= player:get_address()
+                or active.weapon:get_address() ~= weapon:get_address()) then M.finish() end
+            local point = vector(weapon:GetSocketLocation(uevrUtils.fname_from_string('VFXSpawn')))
+            local base = vector(player:K2_GetActorLocation())
+            local yaw = math.rad(player:K2_GetActorRotation().Yaw)
+            local x, y = point.X-base.X, point.Y-base.Y
+            local localPoint = {X=x*math.cos(yaw)+y*math.sin(yaw),
+                Y=-x*math.sin(yaw)+y*math.cos(yaw),Z=point.Z-base.Z}
+            local sample = {point=localPoint,weapon=weapon:get_address()}
+            local last = previous
+            previous = sample
+            if not last or last.weapon ~= sample.weapon then return end
+            -- Ignore pawn translation and yaw; locomotion is not a hand swing.
+            local dx = localPoint.X-last.point.X
+            local dy = localPoint.Y-last.point.Y
+            local dz = localPoint.Z-last.point.Z
+            local distance = math.sqrt(dx*dx+dy*dy+dz*dz)
+            if distance > 60 then M.finish(); armed=false; return end -- tracking jump
+            local speed = distance/dt -- Unreal cm/s
+            if speed < 45 then
+                quiet = quiet + dt
+                if quiet >= 0.08 then
+                    if active then M.finish() end
+                    armed = true
+                end
+            else
+                quiet = 0
+            end
+            if not active and armed and speed >= 100 then
+                begin(player,weapon,true)
+                armed = false
+            end
+            if active then
+                active.elapsed = active.elapsed + dt
+                if active.elapsed >= 1.0 then M.finish() end
+            end
+        end)
+        if not ok then fail(err) end
+    end
+
+    -- Explicit bounded checks, independent of physical controller movement.
+    function M.test(player, weapon, mode, target)
+        M.finish()
+        fault = nil
+        local ok, err = pcall(function()
+            local window = begin(player,weapon,false)
+            if mode == 'check' then
+                uevr.params.functions.log_info('[FK contact test] collision context ready; shapes='
+                    .. window.count .. '; animation=nil; input=none')
+                M.finish()
+                return
+            end
+            assert(mode == 'leg' and valid(target), 'leg test requires a valid target')
+            local mesh = valid(target.Mesh)
+            assert(mesh, 'target mesh unavailable')
+            local p = vector(mesh:GetSocketLocation(uevrUtils.fname_from_string('leg_L3')))
+            local function at(x)
+                return {Translation={X=x,Y=p.Y,Z=p.Z},Rotation={X=0,Y=0,Z=0,W=1},
+                    Scale3D={X=1,Y=1,Z=1}}
+            end
+            local startTransform, endTransform = at(p.X+40), at(p.X-40)
+            window.test = {
+                frame=0,
+                startShape={
+                    Type=2,Radius=2,Socket='None',VelocityType=0,
+                    Attachment={bFollowCasterLocation=false,bFollowSocket=false,bAttachToCaster=false},
+                    WorldTransform=startTransform,WorldTransformLastTick=startTransform,
+                    OriginTransform=startTransform,SmoothedTransform=startTransform,
+                    bShapeStartAtCasterLocation=false,
+                    bEnabled=true,bEnabled_Internal=true,bDisableNextTick=false,
+                },
+                endShape={WorldTransform=endTransform,OriginTransform=endTransform,
+                    Velocity={X=-800,Y=0,Z=0},Direction={X=-1,Y=0,Z=0}},
+            }
+        end)
+        if not ok then fail(err) end
+    end
+    uevr.params.sdk.callbacks.on_script_reset(function() M.finish() end)
+    return M
+end)()

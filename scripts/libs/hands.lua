@@ -151,7 +151,7 @@ local wereHidden = nil
 local handComponents = {}
 local handDefinitions = {}
 local handBoneList = {} --used for debugging
-local offset={X=0, Y=0, Z=0, Pitch=0, Yaw=0, Roll=0}
+local baseOffset=nil--{X=0, Y=0, Z=0, Pitch=0, Yaw=0, Roll=0}
 local baseRotation = nil
 local ignoreRelativeOffset = false
 --local inputHandlerAnimID = {} --list of animID only used for the default input handler
@@ -281,7 +281,7 @@ function M.reset()
 	handComponents = {}
 	handDefinitions = {}
 	handBoneList = {}
-	offset={X=0, Y=0, Z=0, Pitch=0, Yaw=0, Roll=0}
+	baseOffset=nil--{X=0, Y=0, Z=0, Pitch=0, Yaw=0, Roll=0}
 	ignoreRelativeOffset = false
 	--inputHandlerAnimID = {}
 	armsAnimationMeshes[Handed.Left] = {animating=false, mesh=nil, componentName=nil}
@@ -464,8 +464,8 @@ end
 function M.create(skeletalMeshComponent, definition, handAnimations)
 	if definition ~= nil then
 		for name, skeletalMeshDefinition in pairs(definition) do
-			if skeletalMeshDefinition["Offset"] ~= nil then
-				offset = skeletalMeshDefinition["Offset"]
+			if baseOffset == nil and skeletalMeshDefinition["Offset"] ~= nil then
+				baseOffset = skeletalMeshDefinition["Offset"]
 			end
 			ignoreRelativeOffset = skeletalMeshDefinition["IgnoreRelativeOffset"] == true
 			M.print("Creating hand component: " .. name )
@@ -542,7 +542,8 @@ function M.createComponent(skeletalMeshComponent, name, hand, definition)
 			controllers.attachComponentToController(hand, component)
 			--save base rotation in case its needed for gunstock offsets
 			baseRotation = ignoreRelativeOffset and uevrUtils.rotator(0,0,0) or skeletalMeshComponent.RelativeRotation
-			uevrUtils.set_component_relative_transform(component, offset, {Pitch = (baseRotation and baseRotation.Pitch or 0)+offset.Pitch, Yaw=(baseRotation and baseRotation.Yaw or 0)+offset.Yaw,Roll=(baseRotation and baseRotation.Roll or 0)+offset.Roll})
+			if baseOffset == nil then baseOffset = {X=0, Y=0, Z=0, Pitch=0, Yaw=0, Roll=0} end
+			uevrUtils.set_component_relative_transform(component, baseOffset, {Pitch = (baseRotation and baseRotation.Pitch or 0)+baseOffset.Pitch, Yaw=(baseRotation and baseRotation.Yaw or 0)+baseOffset.Yaw,Roll=(baseRotation and baseRotation.Roll or 0)+baseOffset.Roll})
 
 			if definition ~= nil then
 				local jointName = definition["Name"]
@@ -583,7 +584,7 @@ end
 
 --if, in debug mode, the skeleton is not pointed forward when the wrist is pointed forward then make adjustments with this function
 function  M.setOffset(newOffset)
-	offset = newOffset
+	baseOffset = newOffset
 end
 
 function  M.setIgnoreRelativeOffset(value)
@@ -607,6 +608,7 @@ function M.setAnimationMesh(mesh)
 	defaultAnimationMesh = mesh
 end
 
+--This is hardcoding "Root" so it shouldnt be a general purpose function
 function M.setRootBoneRotation(rotator)
 	if rotator == nil then rotator = uevrUtils.rotator(0,0,0) end
 	for name, components in pairs(handComponents) do
@@ -1377,6 +1379,9 @@ local function tryAutoCreateHands()
 			end
 		end
 	end
+end
+function M.regenerateHands()
+	tryAutoCreateHands()
 end
 
 uevrUtils.setInterval(1000, function()

@@ -1,0 +1,273 @@
+00007ffe`44a7cfed 488b05acecba00  mov     rax,qword ptr [UEVRBackend!g_plugin_initialize_param+0x5e3b0 (00007ffe`4562bca0)] ds:00007ffe`4562bca0=0000026879eabf10
+00007ff6`d5b7c800 48895c2408      mov     qword ptr [rsp+8],rbx
+00007ff6`d5b7c805 4889742410      mov     qword ptr [rsp+10h],rsi
+00007ff6`d5b7c80a 57              push    rdi
+00007ff6`d5b7c80b 4883ec20        sub     rsp,20h
+00007ff6`d5b7c80f 488bd9          mov     rbx,rcx
+00007ff6`d5b7c812 498bf8          mov     rdi,r8
+00007ff6`d5b7c815 498b4830        mov     rcx,qword ptr [r8+30h]
+00007ff6`d5b7c819 488bf2          mov     rsi,rdx
+00007ff6`d5b7c81c 4885c9          test    rcx,rcx
+00007ff6`d5b7c81f 740f            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cccf0 (00007ff6`d5b7c830)
+00007ff6`d5b7c821 4881c118010000  add     rcx,118h
+00007ff6`d5b7c828 498bd0          mov     rdx,r8
+00007ff6`d5b7c82b e8c000edff      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x9cdb0 (00007ff6`d5a4c8f0)
+00007ff6`d5b7c830 807f0100        cmp     byte ptr [rdi+1],0
+00007ff6`d5b7c834 7442            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccd38 (00007ff6`d5b7c878)
+00007ff6`d5b7c836 488b03          mov     rax,qword ptr [rbx]
+00007ff6`d5b7c839 488bcb          mov     rcx,rbx
+00007ff6`d5b7c83c ff90a8030000    call    qword ptr [rax+3A8h]
+00007ff6`d5b7c842 80785802        cmp     byte ptr [rax+58h],2
+00007ff6`d5b7c846 7520            jne     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccd28 (00007ff6`d5b7c868)
+00007ff6`d5b7c848 803db1026a0400  cmp     byte ptr [SLASHER_Win64_Shipping!D3D12SDKPath+0x2976e0 (00007ff6`da21cb00)],0
+00007ff6`d5b7c84f 488b5e60        mov     rbx,qword ptr [rsi+60h]
+00007ff6`d5b7c853 740d            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccd22 (00007ff6`d5b7c862)
+00007ff6`d5b7c855 4885db          test    rbx,rbx
+00007ff6`d5b7c858 7408            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccd22 (00007ff6`d5b7c862)
+00007ff6`d5b7c85a 488bcb          mov     rcx,rbx
+00007ff6`d5b7c85d e8ae9774fb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x2f9a30 (00007ff6`d12c6010)
+00007ff6`d5b7c862 48395f60        cmp     qword ptr [rdi+60h],rbx
+00007ff6`d5b7c866 7410            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccd38 (00007ff6`d5b7c878)
+00007ff6`d5b7c868 e8336effff      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1c3b60 (00007ff6`d5b736a0)
+00007ff6`d5b7c86d 488bd7          mov     rdx,rdi
+00007ff6`d5b7c870 488bc8          mov     rcx,rax
+00007ff6`d5b7c873 e8685d1c00      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x392aa0 (00007ff6`d5d425e0)
+00007ff6`d5b7c878 488b5c2430      mov     rbx,qword ptr [rsp+30h]
+00007ff6`d5b7c87d 488b742438      mov     rsi,qword ptr [rsp+38h]
+00007ff6`d5b7c882 4883c420        add     rsp,20h
+00007ff6`d5b7c886 5f              pop     rdi
+00007ff6`d5b7c887 c3              ret
+00007ff6`d5b7c888 cc              int     3
+00007ff6`d5b7c889 cc              int     3
+00007ff6`d5b7c88a cc              int     3
+00007ff6`d5b7c88b cc              int     3
+00007ff6`d5b7c88c cc              int     3
+00007ff6`d5b7c88d cc              int     3
+00007ff6`d5b7c88e cc              int     3
+00007ff6`d5b7c88f cc              int     3
+00007ff6`d5b7c890 48895c2418      mov     qword ptr [rsp+18h],rbx
+00007ff6`d5b7c895 48896c2420      mov     qword ptr [rsp+20h],rbp
+00007ff6`d5b7c89a 56              push    rsi
+00007ff6`d5b7c89b 4883ec30        sub     rsp,30h
+00007ff6`d5b7c89f 498bf0          mov     rsi,r8
+00007ff6`d5b7c8a2 488bea          mov     rbp,rdx
+00007ff6`d5b7c8a5 488bd9          mov     rbx,rcx
+00007ff6`d5b7c8a8 e8d3f30200      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1fc140 (00007ff6`d5babc80)
+00007ff6`d5b7c8ad 4885ed          test    rbp,rbp
+00007ff6`d5b7c8b0 0f84de000000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce54 (00007ff6`d5b7c994)
+00007ff6`d5b7c8b6 488b8600150000  mov     rax,qword ptr [rsi+1500h]
+00007ff6`d5b7c8bd 4885c0          test    rax,rax
+00007ff6`d5b7c8c0 0f84ce000000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce54 (00007ff6`d5b7c994)
+00007ff6`d5b7c8c6 448b00          mov     r8d,dword ptr [rax]
+00007ff6`d5b7c8c9 8b83780f0000    mov     eax,dword ptr [rbx+0F78h]
+00007ff6`d5b7c8cf 48897c2440      mov     qword ptr [rsp+40h],rdi
+00007ff6`d5b7c8d4 4c89742448      mov     qword ptr [rsp+48h],r14
+00007ff6`d5b7c8d9 4533f6          xor     r14d,r14d
+00007ff6`d5b7c8dc 3b83a40f0000    cmp     eax,dword ptr [rbx+0FA4h]
+00007ff6`d5b7c8e2 7455            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccdf9 (00007ff6`d5b7c939)
+00007ff6`d5b7c8e4 488b93b00f0000  mov     rdx,qword ptr [rbx+0FB0h]
+00007ff6`d5b7c8eb 488d83a80f0000  lea     rax,[rbx+0FA8h]
+00007ff6`d5b7c8f2 8b8bb80f0000    mov     ecx,dword ptr [rbx+0FB8h]
+00007ff6`d5b7c8f8 4885d2          test    rdx,rdx
+00007ff6`d5b7c8fb 480f44d0        cmove   rdx,rax
+00007ff6`d5b7c8ff ffc9            dec     ecx
+00007ff6`d5b7c901 4923c8          and     rcx,r8
+00007ff6`d5b7c904 8b048a          mov     eax,dword ptr [rdx+rcx*4]
+00007ff6`d5b7c907 83f8ff          cmp     eax,0FFFFFFFFh
+00007ff6`d5b7c90a 742d            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccdf9 (00007ff6`d5b7c939)
+00007ff6`d5b7c90c 488b93700f0000  mov     rdx,qword ptr [rbx+0F70h]
+00007ff6`d5b7c913 0f1f4000        nop     dword ptr [rax]
+00007ff6`d5b7c917 660f1f840000000000 nop   word ptr [rax+rax]
+00007ff6`d5b7c920 4898            cdqe
+00007ff6`d5b7c922 488d0c80        lea     rcx,[rax+rax*4]
+00007ff6`d5b7c926 48c1e104        shl     rcx,4
+00007ff6`d5b7c92a 44390411        cmp     dword ptr [rcx+rdx],r8d
+00007ff6`d5b7c92e 7474            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce64 (00007ff6`d5b7c9a4)
+00007ff6`d5b7c930 8b441148        mov     eax,dword ptr [rcx+rdx+48h]
+00007ff6`d5b7c934 83f8ff          cmp     eax,0FFFFFFFFh
+00007ff6`d5b7c937 75e7            jne     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccde0 (00007ff6`d5b7c920)
+00007ff6`d5b7c939 498bd6          mov     rdx,r14
+00007ff6`d5b7c93c 4885d2          test    rdx,rdx
+00007ff6`d5b7c93f 488d7a08        lea     rdi,[rdx+8]
+00007ff6`d5b7c943 490f44fe        cmove   rdi,r14
+00007ff6`d5b7c947 4438b3650f0000  cmp     byte ptr [rbx+0F65h],r14b
+00007ff6`d5b7c94e 7420            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce30 (00007ff6`d5b7c970)
+00007ff6`d5b7c950 4885ff          test    rdi,rdi
+00007ff6`d5b7c953 741b            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce30 (00007ff6`d5b7c970)
+00007ff6`d5b7c955 488d8610150000  lea     rax,[rsi+1510h]
+00007ff6`d5b7c95c 488bd5          mov     rdx,rbp
+00007ff6`d5b7c95f 4c8d4f20        lea     r9,[rdi+20h]
+00007ff6`d5b7c963 4889442420      mov     qword ptr [rsp+20h],rax
+00007ff6`d5b7c968 488bcb          mov     rcx,rbx
+00007ff6`d5b7c96b e8b0c5feff      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1b93e0 (00007ff6`d5b68f20)
+00007ff6`d5b7c970 4438b3540f0000  cmp     byte ptr [rbx+0F54h],r14b
+00007ff6`d5b7c977 7411            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce4a (00007ff6`d5b7c98a)
+00007ff6`d5b7c979 4438b3640f0000  cmp     byte ptr [rbx+0F64h],r14b
+00007ff6`d5b7c980 7408            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce4a (00007ff6`d5b7c98a)
+00007ff6`d5b7c982 4885ff          test    rdi,rdi
+00007ff6`d5b7c985 7403            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce4a (00007ff6`d5b7c98a)
+00007ff6`d5b7c987 448937          mov     dword ptr [rdi],r14d
+00007ff6`d5b7c98a 488b7c2440      mov     rdi,qword ptr [rsp+40h]
+00007ff6`d5b7c98f 4c8b742448      mov     r14,qword ptr [rsp+48h]
+00007ff6`d5b7c994 488b5c2450      mov     rbx,qword ptr [rsp+50h]
+00007ff6`d5b7c999 488b6c2458      mov     rbp,qword ptr [rsp+58h]
+00007ff6`d5b7c99e 4883c430        add     rsp,30h
+00007ff6`d5b7c9a2 5e              pop     rsi
+00007ff6`d5b7c9a3 c3              ret
+00007ff6`d5b7c9a4 4803d1          add     rdx,rcx
+00007ff6`d5b7c9a7 eb93            jmp     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccdfc (00007ff6`d5b7c93c)
+00007ff6`d5b7c9a9 cc              int     3
+00007ff6`d5b7c9aa cc              int     3
+00007ff6`d5b7c9ab cc              int     3
+00007ff6`d5b7c9ac cc              int     3
+00007ff6`d5b7c9ad cc              int     3
+00007ff6`d5b7c9ae cc              int     3
+00007ff6`d5b7c9af cc              int     3
+00007ff6`d5b7c9b0 4053            push    rbx
+00007ff6`d5b7c9b2 4883ec20        sub     rsp,20h
+00007ff6`d5b7c9b6 488bd9          mov     rbx,rcx
+00007ff6`d5b7c9b9 e832e17bfb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x36e510 (00007ff6`d133aaf0)
+00007ff6`d5b7c9be 80bbac00000000  cmp     byte ptr [rbx+0ACh],0
+00007ff6`d5b7c9c5 7414            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cce9b (00007ff6`d5b7c9db)
+00007ff6`d5b7c9c7 c6839800000001  mov     byte ptr [rbx+98h],1
+00007ff6`d5b7c9ce c683ac00000000  mov     byte ptr [rbx+0ACh],0
+00007ff6`d5b7c9d5 4883c420        add     rsp,20h
+00007ff6`d5b7c9d9 5b              pop     rbx
+00007ff6`d5b7c9da c3              ret
+00007ff6`d5b7c9db 488b839c000000  mov     rax,qword ptr [rbx+9Ch]
+00007ff6`d5b7c9e2 33c9            xor     ecx,ecx
+00007ff6`d5b7c9e4 48894c2430      mov     qword ptr [rsp+30h],rcx
+00007ff6`d5b7c9e9 483bc1          cmp     rax,rcx
+00007ff6`d5b7c9ec 7418            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccec6 (00007ff6`d5b7ca06)
+00007ff6`d5b7c9ee 488b83a4000000  mov     rax,qword ptr [rbx+0A4h]
+00007ff6`d5b7c9f5 48894c2430      mov     qword ptr [rsp+30h],rcx
+00007ff6`d5b7c9fa 483bc1          cmp     rax,rcx
+00007ff6`d5b7c9fd 7407            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccec6 (00007ff6`d5b7ca06)
+00007ff6`d5b7c9ff c6839800000002  mov     byte ptr [rbx+98h],2
+00007ff6`d5b7ca06 4883c420        add     rsp,20h
+00007ff6`d5b7ca0a 5b              pop     rbx
+00007ff6`d5b7ca0b c3              ret
+00007ff6`d5b7ca0c cc              int     3
+00007ff6`d5b7ca0d cc              int     3
+00007ff6`d5b7ca0e cc              int     3
+00007ff6`d5b7ca0f cc              int     3
+00007ff6`d5b7ca10 4055            push    rbp
+00007ff6`d5b7ca12 57              push    rdi
+00007ff6`d5b7ca13 4883ec28        sub     rsp,28h
+00007ff6`d5b7ca17 4883b98000000000 cmp     qword ptr [rcx+80h],0
+00007ff6`d5b7ca1f 488bea          mov     rbp,rdx
+00007ff6`d5b7ca22 488bba60060000  mov     rdi,qword ptr [rdx+660h]
+00007ff6`d5b7ca29 0f8400010000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfef (00007ff6`d5b7cb2f)
+00007ff6`d5b7ca2f 48895c2440      mov     qword ptr [rsp+40h],rbx
+00007ff6`d5b7ca34 4c89642450      mov     qword ptr [rsp+50h],r12
+00007ff6`d5b7ca39 4c8d6178        lea     r12,[rcx+78h]
+00007ff6`d5b7ca3d 498bcc          mov     rcx,r12
+00007ff6`d5b7ca40 e8cb7280fb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x3b7730 (00007ff6`d1383d10)
+00007ff6`d5b7ca45 488bd8          mov     rbx,rax
+00007ff6`d5b7ca48 4885c0          test    rax,rax
+00007ff6`d5b7ca4b 0f84d4000000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfe5 (00007ff6`d5b7cb25)
+00007ff6`d5b7ca51 e88afdb6fd      call    SLASHER_Win64_Shipping!src_strerror+0x15bcbc0 (00007ff6`d36ec7e0)
+00007ff6`d5b7ca56 488b5310        mov     rdx,qword ptr [rbx+10h]
+00007ff6`d5b7ca5a 4c8d4030        lea     r8,[rax+30h]
+00007ff6`d5b7ca5e 48634038        movsxd  rax,dword ptr [rax+38h]
+00007ff6`d5b7ca62 3b4238          cmp     eax,dword ptr [rdx+38h]
+00007ff6`d5b7ca65 0f8fba000000    jg      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfe5 (00007ff6`d5b7cb25)
+00007ff6`d5b7ca6b 488bc8          mov     rcx,rax
+00007ff6`d5b7ca6e 488b4230        mov     rax,qword ptr [rdx+30h]
+00007ff6`d5b7ca72 4c3904c8        cmp     qword ptr [rax+rcx*8],r8
+00007ff6`d5b7ca76 0f85a9000000    jne     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfe5 (00007ff6`d5b7cb25)
+00007ff6`d5b7ca7c 4885ff          test    rdi,rdi
+00007ff6`d5b7ca7f 0f84a0000000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfe5 (00007ff6`d5b7cb25)
+00007ff6`d5b7ca85 498bcc          mov     rcx,r12
+00007ff6`d5b7ca88 4c897c2420      mov     qword ptr [rsp+20h],r15
+00007ff6`d5b7ca8d e88e4873ff      call    SLASHER_Win64_Shipping!src_strerror+0x3181700 (00007ff6`d52b1320)
+00007ff6`d5b7ca92 488bb880000000  mov     rdi,qword ptr [rax+80h]
+00007ff6`d5b7ca99 48638088000000  movsxd  rax,dword ptr [rax+88h]
+00007ff6`d5b7caa0 4c69f8b8000000  imul    r15,rax,0B8h
+00007ff6`d5b7caa7 4c03ff          add     r15,rdi
+00007ff6`d5b7caaa 493bff          cmp     rdi,r15
+00007ff6`d5b7caad 7471            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfe0 (00007ff6`d5b7cb20)
+00007ff6`d5b7caaf 4889742448      mov     qword ptr [rsp+48h],rsi
+00007ff6`d5b7cab4 4c89742458      mov     qword ptr [rsp+58h],r14
+00007ff6`d5b7cab9 0f1f8000000000  nop     dword ptr [rax]
+00007ff6`d5b7cac0 498bcc          mov     rcx,r12
+00007ff6`d5b7cac3 e8584873ff      call    SLASHER_Win64_Shipping!src_strerror+0x3181700 (00007ff6`d52b1320)
+00007ff6`d5b7cac8 488b9d28020000  mov     rbx,qword ptr [rbp+228h]
+00007ff6`d5b7cacf 4c8bf0          mov     r14,rax
+00007ff6`d5b7cad2 48638d30020000  movsxd  rcx,dword ptr [rbp+230h]
+00007ff6`d5b7cad9 488d34cb        lea     rsi,[rbx+rcx*8]
+00007ff6`d5b7cadd 483bde          cmp     rbx,rsi
+00007ff6`d5b7cae0 7428            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfca (00007ff6`d5b7cb0a)
+00007ff6`d5b7cae2 488b0b          mov     rcx,qword ptr [rbx]
+00007ff6`d5b7cae5 4885c9          test    rcx,rcx
+00007ff6`d5b7cae8 7417            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfc1 (00007ff6`d5b7cb01)
+00007ff6`d5b7caea 4c8b11          mov     r10,qword ptr [rcx]
+00007ff6`d5b7caed 4c8bcf          mov     r9,rdi
+00007ff6`d5b7caf0 488b9590020000  mov     rdx,qword ptr [rbp+290h]
+00007ff6`d5b7caf7 4d8bc6          mov     r8,r14
+00007ff6`d5b7cafa 41ff9280030000  call    qword ptr [r10+380h]
+00007ff6`d5b7cb01 4883c308        add     rbx,8
+00007ff6`d5b7cb05 483bde          cmp     rbx,rsi
+00007ff6`d5b7cb08 75d8            jne     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccfa2 (00007ff6`d5b7cae2)
+00007ff6`d5b7cb0a 4881c7b8000000  add     rdi,0B8h
+00007ff6`d5b7cb11 493bff          cmp     rdi,r15
+00007ff6`d5b7cb14 75aa            jne     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1ccf80 (00007ff6`d5b7cac0)
+00007ff6`d5b7cb16 4c8b742458      mov     r14,qword ptr [rsp+58h]
+00007ff6`d5b7cb1b 488b742448      mov     rsi,qword ptr [rsp+48h]
+00007ff6`d5b7cb20 4c8b7c2420      mov     r15,qword ptr [rsp+20h]
+00007ff6`d5b7cb25 488b5c2440      mov     rbx,qword ptr [rsp+40h]
+00007ff6`d5b7cb2a 4c8b642450      mov     r12,qword ptr [rsp+50h]
+00007ff6`d5b7cb2f 4883c428        add     rsp,28h
+00007ff6`d5b7cb33 5f              pop     rdi
+00007ff6`d5b7cb34 5d              pop     rbp
+00007ff6`d5b7cb35 c3              ret
+00007ff6`d5b7cb36 cc              int     3
+00007ff6`d5b7cb37 cc              int     3
+00007ff6`d5b7cb38 cc              int     3
+00007ff6`d5b7cb39 cc              int     3
+00007ff6`d5b7cb3a cc              int     3
+00007ff6`d5b7cb3b cc              int     3
+00007ff6`d5b7cb3c cc              int     3
+00007ff6`d5b7cb3d cc              int     3
+00007ff6`d5b7cb3e cc              int     3
+00007ff6`d5b7cb3f cc              int     3
+00007ff6`d5b7cb40 48895c2418      mov     qword ptr [rsp+18h],rbx
+00007ff6`d5b7cb45 56              push    rsi
+00007ff6`d5b7cb46 57              push    rdi
+00007ff6`d5b7cb47 4156            push    r14
+00007ff6`d5b7cb49 4883ec40        sub     rsp,40h
+00007ff6`d5b7cb4d 4533f6          xor     r14d,r14d
+00007ff6`d5b7cb50 488bf2          mov     rsi,rdx
+00007ff6`d5b7cb53 488bd9          mov     rbx,rcx
+00007ff6`d5b7cb56 4c39b258060000  cmp     qword ptr [rdx+658h],r14
+00007ff6`d5b7cb5d 7421            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd040 (00007ff6`d5b7cb80)
+00007ff6`d5b7cb5f e88c03f8ff      call    SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x14d3b0 (00007ff6`d5afcef0)
+00007ff6`d5b7cb64 488bd0          mov     rdx,rax
+00007ff6`d5b7cb67 488d8e58060000  lea     rcx,[rsi+658h]
+00007ff6`d5b7cb6e e87db67bfb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x36bc10 (00007ff6`d13381f0)
+00007ff6`d5b7cb73 84c0            test    al,al
+00007ff6`d5b7cb75 7409            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd040 (00007ff6`d5b7cb80)
+00007ff6`d5b7cb77 488bbe58060000  mov     rdi,qword ptr [rsi+658h]
+00007ff6`d5b7cb7e eb03            jmp     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd043 (00007ff6`d5b7cb83)
+00007ff6`d5b7cb80 498bfe          mov     rdi,r14
+00007ff6`d5b7cb83 44383576ff6904  cmp     byte ptr [SLASHER_Win64_Shipping!D3D12SDKPath+0x2976e0 (00007ff6`da21cb00)],r14b
+00007ff6`d5b7cb8a 7416            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd062 (00007ff6`d5b7cba2)
+00007ff6`d5b7cb8c 4885ff          test    rdi,rdi
+00007ff6`d5b7cb8f 7411            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd062 (00007ff6`d5b7cba2)
+00007ff6`d5b7cb91 488bcf          mov     rcx,rdi
+00007ff6`d5b7cb94 e8779474fb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x2f9a30 (00007ff6`d12c6010)
+00007ff6`d5b7cb99 4889bba80c0000  mov     qword ptr [rbx+0CA8h],rdi
+00007ff6`d5b7cba0 eb10            jmp     SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd072 (00007ff6`d5b7cbb2)
+00007ff6`d5b7cba2 4889bba80c0000  mov     qword ptr [rbx+0CA8h],rdi
+00007ff6`d5b7cba9 4885ff          test    rdi,rdi
+00007ff6`d5b7cbac 0f842a020000    je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd29c (00007ff6`d5b7cddc)
+00007ff6`d5b7cbb2 44383547ff6904  cmp     byte ptr [SLASHER_Win64_Shipping!D3D12SDKPath+0x2976e0 (00007ff6`da21cb00)],r14b
+00007ff6`d5b7cbb9 48896c2468      mov     qword ptr [rsp+68h],rbp
+00007ff6`d5b7cbbe 7411            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd091 (00007ff6`d5b7cbd1)
+00007ff6`d5b7cbc0 488b8e70060000  mov     rcx,qword ptr [rsi+670h]
+00007ff6`d5b7cbc7 4885c9          test    rcx,rcx
+00007ff6`d5b7cbca 7405            je      SLASHER_Win64_Shipping!IAntiLag2Module::~IAntiLag2Module+0x1cd091 (00007ff6`d5b7cbd1)
+00007ff6`d5b7cbcc e83f9474fb      call    SLASHER_Win64_Shipping!IAntiLag2Module::operator=+0x2f9a30 (00007ff6`d12c6010)
+00007ff6`d5b7cbd1 488b8670060000  mov     rax,qword ptr [rsi+670h]
+00007ff6`d5b7cbd8 488983980c0000  mov     qword ptr [rbx+0C98h],rax
+00007ff6`d5b7cbdf 4438351aff6904  cmp     byte ptr [SLASHER_Win64_Shipping!D3D12SDKPath+0x2976e0 (00007ff6`da21cb00)],r14b

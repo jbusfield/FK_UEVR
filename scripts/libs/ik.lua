@@ -43,6 +43,11 @@ Usage
         example:
             ik.setAutoCreateArms(false)
 
+	Enhanced Stabilization (enhanced_stabilization) is a per-rig IK Dev Config checkbox.
+		When enabled, IK runs after the engine tick. The mesh stays attached to its
+		selected parent for position, while its world rotation is set before the solve.
+		Disabled by default for existing game profiles.
+
     ik.new((optional)options) - creates a new IK rig instance from the active (or specified) profile.
 		Returns the rig instance, or nil if creation failed.
 		options:
@@ -50,6 +55,7 @@ Usage
 			animationsFile - hands_parameters file name for grip animations (e.g. "hands_parameters")
 			tickPhase - "pre" (default) or "post" engine tick
 			tickPriority - optional tick callback priority
+			Enhanced Stabilization is read from the rig profile, not from ik.new options.
         example:
             local rig = ik.new({ animationsFile = "hands_parameters" })
             local rig = ik.new({ rigId = "my_profile", tickPhase = "post" })
@@ -383,6 +389,7 @@ local parameters = {
 	debug_sphere_forearmTwist = true,
     mesh_location_offset = uevrUtils.vector(0,0,0),
     mesh_rotation_offset = uevrUtils.rotator(0,0,0),
+    mesh_scale_offset = uevrUtils.vector(1,1,1),
     animation_location_offset = uevrUtils.vector(0,0,0),
     animation_rotation_offset = uevrUtils.rotator(0,0,0),
 	animation_ik_pose_authoritative = false,
@@ -504,10 +511,14 @@ end
 
 function M.new(options)
     options = options or {}
+    local rigId = options.rigId or paramManager:getActiveProfile()
+    local rigParams = rigId and paramManager:get(rigId) or nil
+    local enhancedStabilization = rigParams ~= nil and rigParams.enhanced_stabilization == true
     local self = setmetatable({
-		tickPhase = options.tickPhase or "pre", -- "pre" or "post"
+		tickPhase = enhancedStabilization and "post" or (options.tickPhase or "pre"),
 		tickPriority = options.tickPriority,
-		rigId = options.rigId or paramManager:getActiveProfile(),
+		enhancedStabilization = enhancedStabilization,
+		rigId = rigId,
 		orderedSolvers = nil,
 		solverOrderDirty = true,
 
@@ -580,12 +591,21 @@ local function getTargetLocationAndRotation(hand, controller)
 		end
     else
         local handStatus = accessoryStatus[hand]
-        if uevrUtils.getValid(handStatus.parentAttachment) ~= nil then
-            if handStatus.parentAttachment.GetSocketLocation == nil then
-                print("IK accessory parent attachment has no GetSocketLocation:", handStatus.parentAttachment:get_full_name())
+        local target = uevrUtils.getValid(handStatus.parentAttachment)
+        if target ~= nil then
+            -- Keep the existing socket path; only fall back to the component
+            -- transform for a blank socket name when socket getters are absent.
+            if target.GetSocketLocation ~= nil and target.GetSocketRotation ~= nil then
+                loc = target:GetSocketLocation(uevrUtils.fname_from_string(handStatus.socketName or ""))
+                rot = target:GetSocketRotation(uevrUtils.fname_from_string(handStatus.socketName or ""))
+            elseif (handStatus.socketName == nil or handStatus.socketName == "")
+                and target.K2_GetComponentLocation ~= nil and target.K2_GetComponentRotation ~= nil then
+                loc = target:K2_GetComponentLocation()
+                rot = target:K2_GetComponentRotation()
             else
-                loc = handStatus.parentAttachment:GetSocketLocation(uevrUtils.fname_from_string(handStatus.socketName or ""))
-                rot = handStatus.parentAttachment:GetSocketRotation(uevrUtils.fname_from_string(handStatus.socketName or ""))
+                print("IK accessory target has no usable transform:", target:get_full_name())
+            end
+            if loc ~= nil and rot ~= nil then
                 --print("Socket",loc.X, loc.Y, loc.Z)
 				--print("Controller",controller:K2_GetComponentLocation().X, controller:K2_GetComponentLocation().Y, controller:K2_GetComponentLocation().Z)
 				if handStatus.loc ~= nil and handStatus.rot ~= nil then
@@ -706,6 +726,32 @@ function Rig:runInitialCustomTransform()
 	end
 end
 
+function Rig:updateEnhancedMeshRotation(mesh, rootComponent, lockMeshYawToHmd)
+	if not self.enhancedStabilization or mesh == nil or mesh.K2_SetWorldRotation == nil then return end
+	local rotation = nil
+	if self.coupling == 2 then
+		local hmdRot = controllers.getControllerRotation(2)
+		if hmdRot ~= nil then
+			rotation = kismet_math_library:ComposeRotators(self.meshRotationOffset, hmdRot)
+		end
+	elseif self.coupling == 1 then
+		if lockMeshYawToHmd then
+			local hmdRot = controllers.getControllerRotation(2)
+			if hmdRot ~= nil then
+				rotation = uevrUtils.rotator(0, hmdRot.Yaw + (self.meshRotationOffset.Yaw or 0), 0)
+			end
+		elseif rootComponent ~= nil then
+			local rootRot = rootComponent:K2_GetComponentRotation()
+			if rootRot ~= nil then
+				rotation = kismet_math_library:ComposeRotators(self.meshRotationOffset, rootRot)
+			end
+		end
+	end
+	if rotation ~= nil then
+		mesh:K2_SetWorldRotation(rotation, false, reusable_hit_result, false)
+	end
+end
+
 function Rig:create()
     if UKismetAnimationLibrary == nil then
 		UKismetAnimationLibrary = uevrUtils.find_default_instance("Class /Script/AnimGraphRuntime.KismetAnimationLibrary")
@@ -748,19 +794,17 @@ function Rig:create()
 					--print(self.coupling)
 					if self.coupling == 1 then
 						mesh.RelativeLocation.Z = self.meshLocationOffset.Z + (self.meshLocationOffset.Z + capsuleHeight)
-					elseif self.coupling == 2 then
-						--local rootLocation = rootComponent:K2_GetComponentLocation()
-						--rootLocation.Z = rootLocation.Z - capsuleHeight
-						--mesh.RelativeLocation.Z = rootLocation.Z - capsuleHeight
-						--mesh:K2_SetWorldLocationAndRotation(rootLocation, rootComponent:K2_GetComponentRotation(), false, reusable_hit_result, nil)
 					elseif self.coupling == 3 then
 						mesh.RelativeLocation.Z = self.meshLocationOffset.Z + (self.meshLocationOffset.Z + capsuleHeight)
 						if not lockMeshYawToHmd then
 							mesh:K2_SetWorldRotation(rootComponent:K2_GetComponentRotation(), false, reusable_hit_result, nil)
 						end
 					end
+					if self.enhancedStabilization then
+						self:updateEnhancedMeshRotation(mesh, rootComponent, lockMeshYawToHmd)
+					end
 
-					if (self.coupling == 1 or self.coupling == 3) and mesh.K2_SetWorldRotation ~= nil then
+					if ((self.coupling == 1 and not self.enhancedStabilization) or self.coupling == 3) and mesh.K2_SetWorldRotation ~= nil then
 						if lockMeshYawToHmd then
 							local hmdRot = controllers.getControllerRotation(2)
 							if hmdRot ~= nil then
@@ -851,7 +895,7 @@ end
 function Rig:initializeRigState()
 	if self.meshList ~= nil then
 		for _, mesh in pairs(self.meshList) do
-			uevrUtils.destroyComponent(mesh, true, true)
+			uevrUtils.destroyComponentSafe(mesh, true)
 		end
 		self.meshList = nil
 	end
@@ -900,43 +944,33 @@ function Rig:initializeRigState()
 		--local capsuleHeight = rootComponent.CapsuleHalfHeight or 0 --should be used here but the tick handles it so whatever
 		self.meshLocationOffset = getParameter({self.rigId, "mesh_location_offset"}) and uevrUtils.vector(getParameter({self.rigId, "mesh_location_offset"})) or uevrUtils.vector(0,0,0)
 		self.meshRotationOffset = getParameter({self.rigId, "mesh_rotation_offset"}) and uevrUtils.rotator(getParameter({self.rigId, "mesh_rotation_offset"})) or uevrUtils.rotator(0,0,0)
+		self.meshScaleOffset = getParameter({self.rigId, "mesh_scale_offset"}) and uevrUtils.vector(getParameter({self.rigId, "mesh_scale_offset"})) or uevrUtils.vector(1,1,1)
 		for _, meshTemplate in pairs(self.meshTemplates) do
 			--print("Creating mesh from template:", meshTemplate)
 			local mesh = uevrUtils.createPoseableMeshFromSkeletalMesh(meshTemplate.instance, {useDefaultPose = true, showDebug=false})
 			if mesh ~= nil then
 				table.insert(self.meshList, mesh)
 				meshTemplate.mesh = mesh
---				self.mesh = mesh
-				-- local springArm = uevrUtils.create_component_of_class("Class /Script/Engine.SpringArmComponent")
-				-- springArm.TargetArmLength = 0
-				-- springArm.bEnableCameraLag = true
-				-- springArm.CameraLagSpeed = 20.0
-				-- springArm.bEnableCameraRotationLag = true
-				-- springArm.CameraRotationLagSpeed = 5.0
-				-- springArm.bUsePawnControlRotation = false
-				-- --controllers.attachComponentToController(2, self.mesh, "", 0, false, true)
-				-- controllers.attachComponentToController(2, springArm, "", 0, false, true)
-				-- self.mesh:K2_AttachTo(springArm, uevrUtils.fname_from_string(""), 0, false)
-
 				if self.coupling == 1 or self.coupling == 3 then
 					mesh:K2_AttachTo(rootComponent, uevrUtils.fname_from_string(""), 0, false)
 				elseif self.coupling == 2 then
-					local springArm = uevrUtils.create_component_of_class("Class /Script/Engine.SpringArmComponent")
-					if springArm ~= nil then
-						if self.springArmList == nil then
-							self.springArmList = {}
+					if self.enhancedStabilization then
+						local hmdController = controllers.getController(2, true) or controllers.createController(2)
+						if hmdController ~= nil then
+							mesh:K2_AttachTo(hmdController, uevrUtils.fname_from_string(""), 0, false)
 						end
-						table.insert(self.springArmList, springArm)
-
-						springArm.TargetArmLength = 0
-						--springArm.bEnableCameraLag = true
-						--springArm.CameraLagSpeed = 20.0
-						springArm.bEnableCameraRotationLag = true
-						springArm.CameraRotationLagSpeed = 10.0 --3.0 give a nice lag
-						springArm.bUsePawnControlRotation = false
-						--springArm:K2_AttachTo(rootComponent, uevrUtils.fname_from_string(""), 0, false)
-						controllers.attachComponentToController(2, springArm, "", 0, false, true)
-						mesh:K2_AttachTo(springArm, uevrUtils.fname_from_string(""), 0, false)
+					else
+						local springArm = uevrUtils.create_component_of_class("Class /Script/Engine.SpringArmComponent")
+						if springArm ~= nil then
+							if self.springArmList == nil then self.springArmList = {} end
+							table.insert(self.springArmList, springArm)
+							springArm.TargetArmLength = 0
+							springArm.bEnableCameraRotationLag = true
+							springArm.CameraRotationLagSpeed = 10.0
+							springArm.bUsePawnControlRotation = false
+							controllers.attachComponentToController(2, springArm, "", 0, false, true)
+							mesh:K2_AttachTo(springArm, uevrUtils.fname_from_string(""), 0, false)
+						end
 					end
 				end
 
@@ -946,6 +980,12 @@ function Rig:initializeRigState()
 
 				mesh.RelativeLocation = self.meshLocationOffset
 				mesh.RelativeRotation = self.meshRotationOffset
+				mesh.RelativeScale3D = self.meshScaleOffset
+				if (self.coupling == 1 or self.coupling == 2) and self.enhancedStabilization and mesh.SetAbsolute ~= nil then
+					-- Preserve the selected parent's translation without inheriting its later rotation.
+					mesh:SetAbsolute(false, true, false)
+					self:updateEnhancedMeshRotation(mesh, rootComponent, false)
+				end
 			else
 				if meshTemplate.optional ~= true then
 					M.print("Failed to initializeRigStat because required mesh is could not be created")
@@ -1136,12 +1176,14 @@ local function isRigLevelParam(paramName)
 	return paramName == "mesh"
 		or paramName == "mesh_location_offset"
 		or paramName == "mesh_rotation_offset"
+		or paramName == "mesh_scale_offset"
 		or paramName == "animation_mesh"
 		or paramName == "animation_location_offset"
 		or paramName == "animation_rotation_offset"
 		or paramName == "animation_ik_pose_authoritative"
 		or paramName == "show_debug_meshes"
 		or paramName == "parent_type"
+		or paramName == "enhanced_stabilization"
 		or paramName == "spine_bone_name"
 		or paramName == "left_shoulder_bone_name"
 		or paramName == "right_shoulder_bone_name"
@@ -1370,7 +1412,7 @@ function Rig:setRigParameter(paramName, value)
 		return
 	end
 
-	if paramName == "parent_type" then
+	if paramName == "parent_type" or paramName == "enhanced_stabilization" then
 		M.destroyAll()
 		return
 	end
@@ -1402,11 +1444,10 @@ function Rig:setRigParameter(paramName, value)
 
     if paramName == "mesh_location_offset" then
 		local offset = value and uevrUtils.vector(value) or uevrUtils.vector(0,0,0)
-		--get this rigs mesh and set its relative location
 		self.meshLocationOffset = offset
         if self.meshList ~= nil then --update live
 			for _, mesh in pairs(self.meshList) do
-            	mesh.RelativeLocation = offset
+				mesh.RelativeLocation = offset
 			end
         end
 		return
@@ -1414,11 +1455,24 @@ function Rig:setRigParameter(paramName, value)
 
     if paramName == "mesh_rotation_offset" then
 		local offset = value and uevrUtils.rotator(value) or uevrUtils.rotator(0,0,0)
-		--get this rigs mesh and set its relative rotation
 		self.meshRotationOffset = offset
         if self.meshList ~= nil then --update live
 			for _, mesh in pairs(self.meshList) do
-            	mesh.RelativeRotation = offset
+				if self.enhancedStabilization then
+					self:updateEnhancedMeshRotation(mesh, uevrUtils.getValid(getPawn(), {"RootComponent"}), false)
+				else
+					mesh.RelativeRotation = offset
+				end
+			end
+        end
+		return
+	end
+
+    if paramName == "mesh_scale_offset" then
+		self.meshScaleOffset = value and uevrUtils.vector(value) or uevrUtils.vector(1,1,1)
+        if self.meshList ~= nil then --update live
+			for _, mesh in pairs(self.meshList) do
+            	mesh.RelativeScale3D = self.meshScaleOffset
 			end
         end
 		return
@@ -1635,7 +1689,7 @@ function M.destroy(instance, skipUnregister)
 
 		if instance.meshList ~= nil then
 			for _, mesh in pairs(instance.meshList) do
-				uevrUtils.destroyComponent(mesh, true, true)
+				uevrUtils.destroyComponentSafe(mesh, true)
 			end
 			instance.meshList = nil
 		end
@@ -1643,7 +1697,7 @@ function M.destroy(instance, skipUnregister)
 
 		if instance.springArmList ~= nil then
 			for _, springArm in pairs(instance.springArmList) do
-				uevrUtils.destroyComponent(springArm, true, true)
+				uevrUtils.destroyComponentSafe(springArm, true)
 			end
 			instance.springArmList = nil
 		end
@@ -2084,8 +2138,8 @@ function Rig:solveTwoBone(solverParams)
 	-- compToWorld MUST be fetched every tick: the mesh is parented to pawn.RootComponent,
 	-- so any body rotation changes this transform. Caching it causes the hand to drift
 	-- away from the controller whenever the pawn rotates.
-	if uevrUtils.getValid(mesh) == nil or mesh.K2_GetComponentToWorld == nil then
-		M.print("SolveVRArmIK: Mesh has no K2_GetComponentToWorld")
+	if uevrUtils.getValid(mesh) == nil or mesh.K2_GetComponentToWorld == nil or mesh.GetBoneLocationByName == nil then
+		M.print("SolveVRArmIK: Mesh has no K2_GetComponentToWorld or GetBoneLocationByName")
 		return
 	end
 	local compToWorld = mesh:K2_GetComponentToWorld()
@@ -3199,7 +3253,12 @@ function Rig:setActive(solverId, value)
 			M.print("Final bones " .. active.endBone .. ", " .. active.jointBone .. ", " .. active.startBone .. " for solverId " .. tostring(solverId), LogLevel.Info)
 
             mesh.RelativeLocation = rigParams["mesh_location_offset"] and uevrUtils.vector(rigParams["mesh_location_offset"]) or uevrUtils.vector(0,0,0)
-            mesh.RelativeRotation = rigParams["mesh_rotation_offset"] and uevrUtils.rotator(rigParams["mesh_rotation_offset"]) or uevrUtils.rotator(0,0,0)
+            if self.enhancedStabilization then
+                self:updateEnhancedMeshRotation(mesh, uevrUtils.getValid(getPawn(), {"RootComponent"}), false)
+            else
+                mesh.RelativeRotation = rigParams["mesh_rotation_offset"] and uevrUtils.rotator(rigParams["mesh_rotation_offset"]) or uevrUtils.rotator(0,0,0)
+            end
+            mesh.RelativeScale3D = rigParams["mesh_scale_offset"] and uevrUtils.vector(rigParams["mesh_scale_offset"]) or uevrUtils.vector(1,1,1)
 
 			self:initializeSolverState(active)
 			if self.defaultSolverId == nil then

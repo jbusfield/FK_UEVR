@@ -485,13 +485,16 @@ function M.addAttachmentOffsetsToConfigUI(configDefinition, m_attachmentOffsets)
 		accessoriesConfig.createConfigCallbacks(name, widgetPrefix .. name .. "_")
 
 		configui.onUpdate(widgetPrefix .. name .. "_position", function(value)
-			M.updateAttachmentTransform(value, nil, nil, id)
+			M.updateAttachmentTransform(value, nil, nil, id, Handed.Right)
+			M.updateAttachmentTransform(value, nil, nil, id, Handed.Left)
 		end)
 		configui.onUpdate(widgetPrefix .. name .. "_rotation", function(value)
-			M.updateAttachmentTransform(nil, value, nil, id)
+			M.updateAttachmentTransform(nil, value, nil, id, Handed.Right)
+			M.updateAttachmentTransform(nil, value, nil, id, Handed.Left)
 		end)
 		configui.onUpdate(widgetPrefix .. name .. "_scale", function(value)
-			M.updateAttachmentTransform(nil, nil, value, id)
+			M.updateAttachmentTransform(nil, nil, value, id, Handed.Right)
+			M.updateAttachmentTransform(nil, nil, value, id, Handed.Left)
 		end)
 		configui.onCreateOrUpdate(widgetPrefix .. name .. "_is_melee", function(value)
 			M.updateAttachmentIsMelee(id, value)
@@ -2800,9 +2803,11 @@ local function runGripUpdate()
 		M.detachGripAttachments(Handed.Left)
 	end
 
-	--failedAttachments keeps a mesh that cant be attached from endlessly being retried
+	-- failedAttachments stops endless retries: count failures, then true to bail.
+	local maxAttachFails = 3
 	if rightAttachment ~= nil and uevrUtils.getValid(rightAttachment) ~= nil and failedAttachments[rightAttachment:get_full_name()] ~= true then
-		if failedAttachments[rightAttachment:get_full_name()] == nil then failedAttachments[rightAttachment:get_full_name()] = 0 end
+		local rightName = rightAttachment:get_full_name()
+		if failedAttachments[rightName] == nil then failedAttachments[rightName] = 0 end
 		local rightSuccess = false
 		if rightMesh == nil then
 			rightSuccess = M.attachToRawController(rightAttachment, Handed.Right, attachOptionsRight)
@@ -2811,14 +2816,18 @@ local function runGripUpdate()
 		end
 		if not rightSuccess then
 			print("########### Failed to attach right attachment")
-			failedAttachments[rightAttachment:get_full_name()] = failedAttachments[rightAttachment:get_full_name()] + 1
+			local fails = failedAttachments[rightName] + 1
+			failedAttachments[rightName] = fails >= maxAttachFails and true or fails
 		else
-			failedAttachments[rightAttachment:get_full_name()] = 0
+			failedAttachments[rightName] = 0
 		end
+	elseif rightAttachment ~= nil and failedAttachments[rightAttachment:get_full_name()] == true then
+		print("########### Permanent Fail")
 	end
 
 	if leftAttachment ~= nil and uevrUtils.getValid(leftAttachment) ~= nil and failedAttachments[leftAttachment:get_full_name()] ~= true then
-		if failedAttachments[leftAttachment:get_full_name()] == nil then failedAttachments[leftAttachment:get_full_name()] = 0 end
+		local leftName = leftAttachment:get_full_name()
+		if failedAttachments[leftName] == nil then failedAttachments[leftName] = 0 end
 		local leftSuccess = false
 		if leftMesh == nil then
 			leftSuccess = M.attachToRawController(leftAttachment, Handed.Left, attachOptionsLeft)
@@ -2826,9 +2835,10 @@ local function runGripUpdate()
 			leftSuccess = M.attachToMesh(leftAttachment, leftMesh, leftSocketName, Handed.Left, attachOptionsLeft)
 		end
 		if not leftSuccess then
-			failedAttachments[leftAttachment:get_full_name()] = failedAttachments[leftAttachment:get_full_name()] + 1
+			local fails = failedAttachments[leftName] + 1
+			failedAttachments[leftName] = fails >= maxAttachFails and true or fails
 		else
-			failedAttachments[leftAttachment:get_full_name()] = 0
+			failedAttachments[leftName] = 0
 		end
 	end
 	return true

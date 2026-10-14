@@ -405,7 +405,8 @@ Usage
 		example:
 			uevrUtils.stopFadeCamera()  -- immediately removes any camera fade
 			
-	uevrUtils.enableCameraLerp(state, pitch, yaw, roll) - enables/disables camera lerping for specified axes
+	uevrUtils.enableCameraLerp(state, pitch, yaw, roll, (optional)speed) - enables/disables camera lerping for specified axes
+		speed defaults to 0.1 when enabling and 1.0 when disabling
 		example:
 			uevrUtils.enableCameraLerp(true, true, true, false)  -- enable lerp for pitch and yaw only
 			
@@ -1107,14 +1108,22 @@ local function updateDelay(delta)
 		if entry ~= nil then
 			entry.countDown = entry.countDown - delta
 			if entry.countDown < 0 then
+				-- Remove before calling so a callback that throws doesn't rerun every tick
+				table.remove(delayList, i)
 				if entry.func ~= nil then
 					entry.func()
 				end
-				-- Only remove if this slot is still the same entry (callback may have mutated the list).
-				if delayList[i] == entry then
-					table.remove(delayList, i)
-				end
 			end
+			--When using this method a call that throws will rerun every tick
+			-- if entry.countDown < 0 then
+			-- 	if entry.func ~= nil then
+			-- 		entry.func()
+			-- 	end
+			-- 	-- Only remove if this slot is still the same entry (callback may have mutated the list).
+			-- 	if delayList[i] == entry then
+			-- 		table.remove(delayList, i)
+			-- 	end
+			-- end
 		end
 	end
 end
@@ -1481,7 +1490,7 @@ local function executeUEVRCallbacksWithPriorityBooleanResult(callbackName, ...)
 			local funcResult, funcPriority = entry.func(table.unpack({...}))
 			if funcPriority == nil then funcPriority = 0 end
 			if funcResult ~= nil and funcPriority >= priority then
-				result = result or funcResult
+				result = funcResult
 				priority = funcPriority
 			end
 		end
@@ -2336,7 +2345,9 @@ end
 
 function M.getComponentRotation(component)
 	if uevrLib.extremeCompatibilityMode == false then
-		return component:K2_GetComponentRotation()
+		if M.getValid(component) ~= nil then
+			return component:K2_GetComponentRotation()
+		end
 	else
 		if checkPluginExists() then
 			---@diagnostic disable-next-line: need-check-nil
@@ -2541,14 +2552,27 @@ function M.stringFromTag(tag)
 	return tag and tag.TagName and tag.TagName:to_string() or ""
 end
 
-function M.get_world()
-	if game_engine ~= nil then
-		local viewport = game_engine.GameViewport
-		if viewport ~= nil then
-			local world = viewport.World
-			return world
-		end
+function M.get_game_engine()
+	if M.getValid(game_engine) ~= nil then
+		return game_engine
 	end
+
+	game_engine = uevr.api:get_engine()
+
+	if game_engine == nil then
+		game_engine = M.find_first_of("Class /Script/Engine.GameEngine")
+	end
+
+	return game_engine
+end
+
+function M.get_world()
+	local viewport = M.getValid(M.get_game_engine(),{"GameViewport"})
+	if viewport ~= nil then
+		local world = viewport.World
+		return world
+	end
+	
 	return nil
 end
 
@@ -2564,7 +2588,7 @@ function M.spawn_actor_of_class(className, transform, collisionMethod, owner)
 		return nil
 	end
 
-	local viewport = game_engine.GameViewport
+	local viewport = M.getValid(M.get_game_engine(),{"GameViewport"})
 	if viewport == nil then
 		print("Viewport is nil")
 	end
@@ -2590,7 +2614,7 @@ function M.spawn_actor_of_class(className, transform, collisionMethod, owner)
 end
 
 function M.spawn_actor(transform, collisionMethod, owner, tag)
-	local viewport = game_engine.GameViewport
+	local viewport = M.getValid(M.get_game_engine(),{"GameViewport"})
 	if viewport == nil then
 		print("Viewport is nil")
 	end
@@ -3411,6 +3435,19 @@ function M.get_2D_mode()
 	return false
 end
 
+function M.set_roomscale_active(state)
+	uevr.params.vr.set_mod_value("VR_RoomscaleMovement", state and "true" or "false")
+end
+
+function M.get_roomscale_active()
+	local mode = uevr.params.vr:get_mod_value("VR_RoomscaleMovement")
+	if string.sub(mode, 1, 4 ) == "true" then
+		return true
+	else
+		return false
+	end
+end
+
 function M.set_decoupled_pitch(state)
 	--print("Setting decoupled pitch to " ,state)
 	uevr.params.vr.set_mod_value("VR_DecoupledPitch", state and "true" or "false")
@@ -3453,9 +3490,7 @@ function M.enableCameraLerp(state, pitch, yaw, roll, speed)
 	if roll == true then
 		uevr.params.vr.set_mod_value("VR_LerpCameraRoll", state and "true" or "false")
 	end
-	if speed ~= nil then
-		uevr.params.vr.set_mod_value("VR_LerpCameraSpeed", speed)
-	end
+	uevr.params.vr.set_mod_value("VR_LerpCameraSpeed", speed or (state and 0.1 or 1.0))
 end
 
 function M.enableUIFollowsView(state)
@@ -3621,53 +3656,74 @@ function M.getObjectPropertyDescriptors(object, objName, className, includeChild
     return propertyList
 end
 
-function M.destroyComponent(component, destroyOwner, destroyChildren)
+function M.destroyComponent(component, destroyOwner, destroyChildren, showDebug)
 	if M.validate_object(component) ~= nil then
 		local success, response = pcall(function()
 			local name = component:get_full_name()
-			M.print("[destroyComponent] destroyComponent called for " .. name)
+			if showDebug == true then M.print("[destroyComponent] destroyComponent called for " .. name) end
 
 			if destroyChildren == true then
 				local children = component.AttachChildren
 				if children ~= nil then
-					M.print("[destroyComponent] Found " .. #children .. " children")
+					if showDebug == true then M.print("[destroyComponent] Found " .. #children .. " children") end
 					for i = #children, 1, -1 do
 						-- Never propagate destroyOwner into children: they share the same owner actor.
 						-- Destroying the owner during child recursion can invalidate subsequent UObject calls and crash.
 						M.destroyComponent(children[i], false, destroyChildren)
 					end
 				else
-					M.print("[destroyComponent] No children found")
+					if showDebug == true then M.print("[destroyComponent] No children found") end
 				end
 			end
 
-			M.print("[destroyComponent] Getting component owner for " ..  name)
+			if showDebug == true then M.print("[destroyComponent] Getting component owner for " ..  name) end
 			if component.GetOwner ~= nil then
 				local actor = component:GetOwner()
 				if actor ~= nil then
 					local actorName = actor:get_full_name()
-					M.print("[destroyComponent] Found component owner " .. actorName)
+					if showDebug == true then M.print("[destroyComponent] Found component owner " .. actorName) end
 					if actor.K2_DestroyComponent ~= nil then
 						actor:K2_DestroyComponent(component)
-						M.print("[destroyComponent] Destroyed component " .. name)
+						if showDebug == true then M.print("[destroyComponent] Destroyed component " .. name) end
 					elseif component.K2_DestroyComponent ~= nil then
 						component:K2_DestroyComponent(component)
-						M.print("[destroyComponent] Destroyed component directly " .. name)
+						if showDebug == true then M.print("[destroyComponent] Destroyed component directly " .. name) end
 					end
 					if destroyOwner == nil then destroyOwner = false end
 					if destroyOwner then
 						actor:K2_DestroyActor()
-						M.print("[destroyComponent] Destroyed component owner " .. actorName .. " for " .. name)
+						if showDebug == true then M.print("[destroyComponent] Destroyed component owner " .. actorName .. " for " .. name) end
 					end
 				else
-					M.print("[destroyComponent] Component owner not found")
+					if showDebug == true then M.print("[destroyComponent] Component owner not found") end
 				end
 			end
 		end)
 		if success == false then
-			M.print("[destroyComponent] pcall fail " .. response, LogLevel.Error)
+			if showDebug == true then M.print("[destroyComponent] pcall fail " .. response, LogLevel.Error) end
 		end
 	end
+end
+
+-- Like destroyComponent but children owned by game actors (e.g. a gripped weapon) are detached instead of destroyed.
+-- Children on their own mod-spawned plain Actor are destroyed along with that actor.
+function M.destroyComponentSafe(component, destroyOwner, showDebug)
+	if M.validate_object(component) == nil then return end
+	local owner = component.GetOwner ~= nil and component:GetOwner() or nil
+	local children = component.AttachChildren or {}
+	for i = #children, 1, -1 do
+		local child = children[i]
+		local childOwner = child ~= nil and child.GetOwner ~= nil and child:GetOwner() or nil
+		if childOwner == owner then
+			M.destroyComponentSafe(child, false, showDebug)
+		elseif childOwner ~= nil and childOwner:get_class():get_full_name() == "Class /Script/Engine.Actor" then
+			M.destroyComponentSafe(child, true, showDebug)
+		elseif child ~= nil and child.DetachFromParent ~= nil then
+			if showDebug == true then M.print("[destroyComponentSafe] Detaching foreign child " .. child:get_full_name()) end
+			child:DetachFromParent(true, false)
+		end
+	end
+	M.destroyComponent(component, destroyOwner, false, showDebug)
 end
 
 function M.detachAndDestroyComponent(component, destroyOwner, destroyChildren)
@@ -3977,14 +4033,26 @@ function M.createSceneCaptureComponent(options)
 	return component
 end
 
+-- Prefers a widget whose top level UserWidget is in the viewport, since stale copies (e.g. an old HUD after loading a save)
+-- can stay alive with the same owning pawn
 function M.getActiveWidgetByClass(className)
 	local widgets = M.find_all_instances(className, false)
 	if widgets ~= nil and M.getValid(pawn) ~= nil then
+		local widgetTreeClass = M.get_class("Class /Script/UMG.WidgetTree")
+		local fallback = nil
 		for _, widget in ipairs(widgets) do
 			if widget:GetOwningPlayerPawn() == pawn then
-				return widget
+				local root = widget
+				local outer = root:get_outer()
+				while outer ~= nil and outer:is_a(widgetTreeClass) do
+					root = outer:get_outer()
+					outer = root:get_outer()
+				end
+				if root:IsInViewport() then return widget end
+				fallback = fallback or widget
 			end
 		end
+		return fallback
 	end
 end
 
@@ -4245,7 +4313,6 @@ function M.getLineTraceHitResult(originPosition, originDirection, collisionChann
 	return nil, nil
 end
 
-
 function M.getTargetLocation(originPosition, originDirection, collisionChannel, ignoreActors, traceComplex, minHitDistance, maxTraceDistance)
 	local hitResult = M.getLineTraceHitResult(originPosition, originDirection, collisionChannel, traceComplex, ignoreActors, minHitDistance, maxTraceDistance)
 	if hitResult ~= nil then
@@ -4494,6 +4561,20 @@ function hook_function(class_name, function_name, native, prefn, postfn, dbgout)
     if dbgout then M.print("---") end
     return result, class_fn
 end
+-------------------------------------------------------------------------------
+-- Example hook pre function. Post is same but no return.
+-------------------------------------------------------------------------------
+
+-- Note if post, do not return a value. 
+-- If hooking as native, must return false.
+-- local function HookedFunctionPre(fn, obj, locals, result)
+    -- print("Shift beginning : ")
+
+    -- return true
+-- end
+
+--hook_function("BlueprintGeneratedClass /Game/Reality/BP_ShiftManager.BP_ShiftManager_C", "OnShiftBegin", false, HookedFunctionPre, nil, true)
+
 
 -------------------------------------------------------------------------------
 -- returns local pawn
@@ -4566,20 +4647,6 @@ function M.GetInstanceMatching(class_to_search, match_string)
 	end
 end
 
--------------------------------------------------------------------------------
--- Example hook pre function. Post is same but no return.
--------------------------------------------------------------------------------
-
--- Note if post, do not return a value. 
--- If hooking as native, must return false.
--- local function HookedFunctionPre(fn, obj, locals, result)
-    -- print("Shift beginning : ")
-
-    -- return true
--- end
-
---hook_function("BlueprintGeneratedClass /Game/Reality/BP_ShiftManager.BP_ShiftManager_C", "OnShiftBegin", false, HookedFunctionPre, nil, true)
-
 
 M.initUEVR(uevr)
 
@@ -4589,6 +4656,7 @@ M.initUEVR(uevr)
 -- function on_client_restart(newPawn)
 -- 	uevrUtils.print("Pawn changed to " .. newPawn:get_full_name())
 -- end
+---@diagnostic disable-next-line: undefined-global
 if disableHookFunctions ~= true then
 	--print("Hooking PlayerController ClientRestart function to detect pawn changes")
 	hook_function("Class /Script/Engine.PlayerController", "ClientRestart", true, nil,

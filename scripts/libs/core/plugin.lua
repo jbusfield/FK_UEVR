@@ -53,6 +53,25 @@
             end
         end)
 
+        -- ############# Filtered outputs ##############
+        --   Only the named outputs are converted and returned, which is much faster for large out structs.
+        --   Pass {} to return none: result is {} on success, nil on error.
+        -- ##############################################
+        local result = plugin.executeFunctionWithOutputs(kismet_system_library, "SphereOverlapComponents", {"ReturnValue"}, uevrUtils.get_world(), location, radius, objectTypes, classFilter, ignoreActors, foundComponents)
+
+        -- ############# Handles ##############
+        --   Keep a large struct or array output native and pass it, with changes, into another call without JSON conversion.
+        --   "ReturnValue.Field" outputs return single fields; "OutHits.Field" returns that field per array element.
+        --   handleParam(handle, changes, index) takes element index (1-based) of a kept array.
+        --   Handles are single use (array elements once each) and expire after about a second.
+        -- ##############################################
+        local trace = plugin.executeFunctionWithHandle(kismet_system_library, "BoxTraceMultiByProfile", "OutHits", {"ReturnValue", "OutHits.HitObjectHandle"}, world, start, finish, halfSize, orientation, profileName, false, ignoreActors, 0, {}, true)
+        local gen = trace and plugin.executeFunctionWithHandle(generator, "GenerateHitInfo", "ReturnValue", {"ReturnValue.TargetActor"}, weapon, plugin.handleParam(trace.handle, nil, 1))
+        if gen then
+            plugin.executeFunctionWithOutputs(abilityComp, "Impact", {}, plugin.handleParam(gen.handle, { ImpactLocation = { X = 0, Y = 0, Z = 0 } }))
+        end
+        if trace then plugin.releaseHandle(trace.handle) end -- frees the elements not taken
+
         -- ############# GetProperty example ##############
         --   This is what the API version of ActionMappings looks like
         --      TArray<struct FInputActionKeyMapping>         ActionMappings;                                    // 0x0090(0x0010)(Edit, ZeroConstructor, Config, NativeAccessSpecifierPrivate)
@@ -63,9 +82,12 @@
             local gameKey = mappingData["Key"]["KeyName"]
             print("Mapping found for key:", mappingData["ActionName"], gameKey)
         end
+        -- Dotted path into a StructProperty on a UObject:
+        --   plugin.getProperty(niagaraSystem, "ExposedParameters.SortedParameterOffsets")
 
         -- ############# SetProperty example ##############
-        --   Set a field, map entry, or array element. Same indexed syntax as getProperty.
+        --   Set a field, map entry, or array element.
+        --   Same path syntax as getProperty: "Field", "Struct.Field", "Map[Key]", "Arr[2]", "A.B[Key]"
         --   Returns nothing; failures are printed to the log.
         -- ##############################################
 
@@ -80,18 +102,20 @@
 	    local iconsData = uevrUtils.find_required_object(XBOX_ICONS_DATA)
         local XBOX_RB_TEXTURE = "Texture2D /Game/UI/Art/FrontEnd/General/Navigation/Xbox/T_Button_Xbox_RB.T_Button_Xbox_RB"
 	    local rbTexture = uevrUtils.find_required_object(XBOX_RB_TEXTURE)
-        plugin.setProperty(iconsData, "Icons[Gamepad_FaceButton_Left]", rbTexture)
         
-        plugin.setProperty(someActor, "ChildArray[2]", newElement)
+        plugin.setProperty(iconsData, "Icons[Gamepad_FaceButton_Left]", rbTexture) -- access map elements
         
-        plugin.setProperty(someObject, "Opacity", 1.5)
+        plugin.setProperty(someActor, "ChildArray[2]", newElement) -- access array elements
+        
+        plugin.setProperty(someObject, "Opacity", 1.5) -- access scalar properties
+
+        plugin.setProperty(someObject, "Materials.Opacity", 1.5) -- access nested properties
 
 
 ]]--
 local M = {}
 
 M.showDebug = false
-
 local pendingExecuteFunctionCallbacks = {}
 
 local function guid()
@@ -200,6 +224,18 @@ local function convertResultDataType(dataType, dataValue)
                 end
             end
             return map
+        else
+            return dataValue
+        end
+
+    -- SetProperty arrives as an array of property blocks (same shape as ArrayProperty)
+    elseif dataType == "SetProperty" then
+        if type(dataValue) == "table" then
+            local arr = {}
+            for i, v in ipairs(dataValue) do
+                arr[i] = M.convertResultData(v)
+            end
+            return arr
         else
             return dataValue
         end
@@ -325,6 +361,19 @@ function M.executeFunctionAsync(callerObject, functionName, ...)
 end
 
 function M.executeFunction(callerObject, functionName, ...)
+    return M.executeFunctionWithOutputs(callerObject, functionName, nil, ...)
+end
+
+-- outputs: names of the outputs to return, e.g. {"ReturnValue"}; {} returns none (result is {} on success, nil on error)
+function M.executeFunctionWithOutputs(callerObject, functionName, outputs, ...)
+    return M.executeFunctionWithHandle(callerObject, functionName, nil, outputs, ...)
+end
+
+-- keep: name of a struct or array output (e.g. "ReturnValue", "OutHits") to keep native instead of converting; result.handle identifies it.
+-- outputs: as in executeFunctionWithOutputs; "ReturnValue.Field" returns a single field of a struct output,
+-- "OutHits.Field" returns that field for each element of a struct array.
+-- Pass the handle to a later call with M.handleParam. Handles are single use and expire after about a second.
+function M.executeFunctionWithHandle(callerObject, functionName, keep, outputs, ...)
     if callerObject == nil then
         print("[plugin]Error: executeFunction callerObject is nil")
         return nil
@@ -338,6 +387,8 @@ function M.executeFunction(callerObject, functionName, ...)
 		debug = M.showDebug,
 		caller_object = callerObject:get_address(),
 		function_name = functionName,
+		outputs = outputs,
+		keep = keep,
 		params = argsArray
 	}
     if M.showDebug then print("\n############################\nExecuteFunction dispatching for function:\n", functionName, json.dump_string(data)) end
@@ -357,6 +408,24 @@ function M.executeFunction(callerObject, functionName, ...)
     local result = AsyncRegistry[callID].finalResult
     AsyncRegistry[callID] = nil
     return result
+end
+
+-- Argument that takes the kept value for handle, with changes applied to the named fields only.
+-- index (1-based, like the Lua list from an "OutHits.Field" output) takes one struct element of a kept array;
+-- each element can be taken once and the array handle stays live for its other elements.
+function M.handleParam(handle, changes, index)
+    local param = {}
+    for key, value in pairs(changes or {}) do param[key] = value end
+    param["$handle"] = handle
+    if index ~= nil then param["$index"] = index - 1 end
+    return param
+end
+
+-- Frees a handle that will not be used. Optional; unused handles expire on their own.
+function M.releaseHandle(handle)
+    if handle ~= nil then
+        uevr.api:dispatch_custom_event("ReleaseHandle", json.dump_string({ handle = handle }))
+    end
 end
 
 function M.getProperty(callerObject, propertyName)
@@ -423,6 +492,102 @@ function M.setProperty(callerObject, propertyName, value)
 
     -- Void: errors already printed in on_lua_event; success has no caller payload
     AsyncRegistry[callID] = nil
+end
+
+-- Parse UEVR hook `result` lightuserdata (or accept a number address).
+function M.hookPtrAddress(ud)
+    if ud == nil then return nil end
+    if type(ud) == "number" then return ud end
+    local hex = tostring(ud):match("(%x+)$")
+    if not hex then return nil end
+    return tonumber(hex, 16)
+end
+
+-- Typed write into a UFunction hook `result` (and optional locals out-params).
+-- Fire-and-forget: no Lua reply (safe inside UFunction pre-hooks).
+--   plugin.writeHookResult(fn, result, value)
+--   plugin.writeHookResult(fn, result, value, locals)           -- also write named out-params from value table extras
+--   plugin.writeHookResult(fn, result, value, locals, extras)   -- extras = { OutParam = ... }
+function M.writeHookResult(fn, result, value, locals, extras)
+    if fn == nil or result == nil or value == nil then
+        print("[plugin]Error: writeHookResult requires fn, result, and value")
+        return
+    end
+    local fnAddr = fn
+    if type(fn) ~= "number" then
+        if fn.get_address == nil then
+            print("[plugin]Error: writeHookResult fn must be a UFunction or address")
+            return
+        end
+        fnAddr = fn:get_address()
+    end
+    local resultAddr = M.hookPtrAddress(result)
+    if resultAddr == nil then
+        print("[plugin]Error: writeHookResult could not parse result address")
+        return
+    end
+
+    local valueParams = { value }
+    convertInputParams(valueParams)
+
+    local data = {
+        debug = M.showDebug,
+        ["function"] = fnAddr,
+        result_address = resultAddr,
+        value = valueParams[1],
+    }
+    if locals ~= nil then
+        local localsAddr = M.hookPtrAddress(locals)
+        if localsAddr == nil and type(locals) == "userdata" and locals.get_address then
+            localsAddr = locals:get_address()
+        end
+        if localsAddr ~= nil then
+            data.locals_address = localsAddr
+        end
+    end
+    if type(extras) == "table" then
+        local extraParams = { extras }
+        convertInputParams(extraParams)
+        for k, v in pairs(extraParams[1]) do
+            data[k] = v
+        end
+    end
+    uevr.api:dispatch_custom_event("WriteHookResult", json.dump_string(data))
+end
+
+-- Write named out/in params into hook locals (same fire-and-forget event).
+function M.writeHookLocals(fn, locals, values)
+    if fn == nil or locals == nil or values == nil then
+        print("[plugin]Error: writeHookLocals requires fn, locals, and values table")
+        return
+    end
+    local fnAddr = fn
+    if type(fn) ~= "number" then
+        if fn.get_address == nil then
+            print("[plugin]Error: writeHookLocals fn must be a UFunction or address")
+            return
+        end
+        fnAddr = fn:get_address()
+    end
+    local localsAddr = M.hookPtrAddress(locals)
+    if localsAddr == nil and type(locals) == "userdata" and locals.get_address then
+        localsAddr = locals:get_address()
+    end
+    if localsAddr == nil then
+        print("[plugin]Error: writeHookLocals could not parse locals address")
+        return
+    end
+    local valueParams = { values }
+    convertInputParams(valueParams)
+    local data = {
+        debug = M.showDebug,
+        ["function"] = fnAddr,
+        locals_address = localsAddr,
+    }
+    for k, v in pairs(valueParams[1]) do
+        data[k] = v
+    end
+    uevr.api:dispatch_custom_event("WriteHookResult", json.dump_string(data))
 end
 
 function M.addComponent(actorObject, componentClass)

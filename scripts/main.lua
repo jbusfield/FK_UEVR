@@ -16,18 +16,23 @@ local ik = require('libs/ik')
 local mathLib = require('libs/core/math_lib')
 --local handsAnimation = require('libs/hands_animation')
 local mouse = require('libs/mouse')
-local tArray = require("libs/core/tarray")
+--local tArray = require("libs/core/tarray")
 local plugin = require("libs/core/plugin")
 local keyboard = require("libs/keyboard")
+local melee = require('helpers/melee')
 
---uevrUtils.setLogLevel(LogLevel.Debug)
+--uevrUtils.setLogLevel(LogLevel.Warning)
+--uevrUtils.profiler:toggle(true)
 --attachments.setLogLevel(LogLevel.Debug)
 --input.setLogLevel(LogLevel.Debug)
 
+-- register_key_bind("F1", function()
+-- 	uevrUtils.profiler:report()
+-- end)
+--plugin.showDebug = true
 
 --uevrUtils.setDeveloperMode(true)
 --hands.enableConfigurationTool()
-
 ui.init()
 montage.init()
 interaction.init()
@@ -56,7 +61,7 @@ local HandsType = {
 	-- IKArms = 3,
 }
 
-local versionTxt = "v1.0.0"
+local versionTxt = "v1.0.2"
 local title = "FateKeeper, First Person Mod " .. versionTxt
 local configDefinition = {
 	{
@@ -118,7 +123,7 @@ local configDefinition = {
 				{ widgetType = "text", wrapped = true, label = "Pick up/Interact: A button", },
 				{ widgetType = "text", wrapped = true, label = "Cancel/Exit: B button", },
 				{ widgetType = "text", wrapped = true, label = "Change Weapon: X button OR Right Trigger with your hand over your right shoulder", },
-				{ widgetType = "text", wrapped = true, label = "Change Spell: Y button", },
+				{ widgetType = "text", wrapped = true, label = "Weapon/Spell Wheel: Y button quick press", },
 				{ widgetType = "text", wrapped = true, label = "Torch: Long press X button", },
 				{ widgetType = "text", wrapped = true, label = "Use Slot Items: D-Pad + Left Stick Up/Down/Left/Right", },
 				{ widgetType = "text", wrapped = true, label = "Use Slot 1 specifically: Left Trigger near mouth", },
@@ -139,6 +144,7 @@ local options = {
 ui.setHeadLockedUIOptions(options)
 
 local function cleanup()
+    melee.finish()
     status = {}
 end
 
@@ -231,13 +237,30 @@ end
 setInterval(200,checkCastingWeapons)
 
 local function getWeaponMesh()
-    if status.currentWeapon ~= nil and uevrUtils.getValid(status.currentWeapon) ~= nil and status.currentWeapon.StaticMesh ~= nil and status.currentWeaponStaticMeshName == status.currentWeapon.StaticMesh:get_full_name() then
-        return status.currentWeapon
+    local pawn = pawnModule.getPawn() or uevr.api:get_local_pawn(0)
+    if pawn == nil then
+        return nil
     end
 
-    --print("Switching weapon")
-    local pawn = pawnModule.getPawn() or uevr.api:get_local_pawn(0)
-    if pawn == nil or pawn.Mesh == nil or pawn.Mesh.AttachChildren == nil then
+    -- Reset Scripts leaves an already gripped weapon parented to the VR rig.
+    -- Its UObject outer still belongs to Hero, so resolve it by name first.
+    local ownerPath = pawn:get_full_name():match('^[^ ]+ (.+)$')
+    if ownerPath ~= nil then
+        for _, slotName in ipairs({'Hand.R_Hero', 'Override.Hand.R.Torch_Hero'}) do
+            local candidate = uevrUtils.getValid(uevrUtils.find_required_object(
+                'StaticMeshComponent ' .. ownerPath .. '.StaticMesh_EquipmentSlot.' .. slotName))
+            if candidate ~= nil and candidate.StaticMesh ~= nil then
+                local assetName = candidate.StaticMesh:get_full_name()
+                if assetName:find('/Weapons/', 1, true) then
+                    status.currentWeapon = candidate
+                    status.currentWeaponStaticMeshName = assetName
+                    return candidate
+                end
+            end
+        end
+    end
+
+    if pawn.Mesh == nil or pawn.Mesh.AttachChildren == nil then
         return nil
     end
 
@@ -258,7 +281,6 @@ local function getWeaponMesh()
                     (child.SkeletalMesh ~= nil and child.SkeletalMesh:get_full_name():find("/Weapons/", 1, true))
                 )
             then
-                pawn.EquipmentComponent.CurrentWeaponSpeed = 5
                 status.currentWeapon = child
                 status.currentWeaponStaticMeshName = child.StaticMesh:get_full_name()
                 status.currentWeapon:SetVisibility(true, false)
@@ -308,13 +330,11 @@ function on_level_change(level)
 end
 
 attachments.registerAttachmentChangeCallback(function(id, hand, attachment)
+    if hand==Handed.Right then melee.resetWeapon() end
 	-- Reduces processing when no melee weapon is equipped
     local isRightMelee = attachments.isActiveAttachmentMelee(Handed.Right)
     local isLeftMelee = attachments.isActiveAttachmentMelee(Handed.Left)
-	gestures.autoDetectGesture(gestures.Gesture.SWIPE_RIGHT, isRightMelee, Handed.Right)
-	gestures.autoDetectGesture(gestures.Gesture.SWIPE_LEFT, isRightMelee, Handed.Right)
-	gestures.autoDetectGesture(gestures.Gesture.SWIPE_RIGHT, isLeftMelee, Handed.Left)
-	gestures.autoDetectGesture(gestures.Gesture.SWIPE_LEFT, isLeftMelee, Handed.Left)
+	gestures.autoDetectGesture(gestures.Gesture.SWING, isRightMelee, Handed.Right)
 
     if status.currentWeapon ~= nil then
         status.currentWeapon:SetVisibility(true, false)
@@ -344,31 +364,18 @@ local function setMeleeOffset(hand)
     end
 end
 
-gestures.registerSwipeRightCallback(function(strength, hand)
-	--print("Swipe Right detected for right hand")
-    if hand == Handed.Right then
-    	status["hasSwipeRight"] = true
-        setDefaultTargeting(Handed.Right)
-        setMeleeOffset(Handed.Right)
-    else
-        status["hasSwipeLeft"] = true
-        setDefaultTargeting(Handed.Left)
-        setMeleeOffset(Handed.Left)
-    end
-end, true, true)
+gestures.registerSwingBeginCallback(function(strength, hand)
+    if hand ~= Handed.Right or not attachments.isActiveAttachmentMelee(Handed.Right) or ui.isRemapDisabled() then return end
+    melee.beginSwing()
+    setDefaultTargeting(Handed.Right)
+    setMeleeOffset(Handed.Right)
+end, true, false)
 
-gestures.registerSwipeLeftCallback(function(strength, hand)
-	--print("Swipe Left detected for right hand")
-    if hand == Handed.Right then
-    	status["hasSwipeRight"] = true
-        setDefaultTargeting(Handed.Right)
-        setMeleeOffset(Handed.Right)
-    else
-        status["hasSwipeLeft"] = true
-        setDefaultTargeting(Handed.Left)
-        setMeleeOffset(Handed.Left)
-    end
-end, true, true)
+gestures.registerSwingEndCallback(function(strength, hand)
+    if hand == Handed.Right then melee.endSwing() end
+end, true, false)
+
+
 
 local function executeIsArmBonesHiddenCallback(...)
 	return uevrUtils.executeUEVRCallbacksWithPriorityBooleanResult("is_arms_bones_hidden", table.unpack({...}))
@@ -451,15 +458,12 @@ local cinematicMontages = {
 montage.registerMontageChangeCallback(function(montageObject, montageName, label)
 	--print("Montage changed callback:", montageName, label)
 	if montageName ~= "" and label == "Pawn" then
-		local knownAttackMontage = attackMontages[montageName]
-		if knownAttackMontage == true then
-            --print("Known attack montage detected, increasing playback rate")
-			montage.setPlaybackRate(montageObject, label, 3.0)
-            if pawn ~= nil then
-                pawn.Mesh.GlobalAnimRateScale = 2
-                status.isPlayingAttackMontage = true
-            end
-		end
+		-- local knownAttackMontage = attackMontages[montageName]
+		-- if knownAttackMontage == true then
+        --     if pawn ~= nil then
+        --         status.isPlayingAttackMontage = true
+        --     end
+		-- end
 
         local knownCinematicMontage = cinematicMontages[montageName]
 		if knownCinematicMontage == true then
@@ -470,12 +474,7 @@ montage.registerMontageChangeCallback(function(montageObject, montageName, label
 		end
 	end
     if (montageName == nil or montageName == "") then
-        if status.isPlayingAttackMontage == true then
-            if pawn ~= nil then
-                pawn.Mesh.GlobalAnimRateScale = 1
-            end
-        end
-        status.isPlayingAttackMontage = false
+        --status.isPlayingAttackMontage = false
 
         if status.isPlayingCinematicMontage == true then
             uevrUtils.setUEVRParam("VR_CameraForwardOffset", 0)
@@ -539,7 +538,7 @@ local function initializeInputMappings()
 
         --plugin.showDebug = true
         local result = plugin.getProperty(inputSettings, "ActionMappings")
-        for i, mappingData in ipairs(result) do
+        for i, mappingData in ipairs(result or {}) do
             local gameKey = mappingData["Key"]["KeyName"]
             if not gameKey:match("^Gamepad_") then
                 --print("Mapping found for key:", mappingData["KeyName"], mappingData["Key"])
@@ -559,8 +558,94 @@ local STICK_DEADZONE = 22000
 local TOGGLE_SPRINT = true
 local LONG_PRESS_SECONDS = 0.35
 local xInputStatus = {}
+
+local screenWidgets = {}
+local function getTopLevelWidgetsOnScreen(widgetNames)
+    local result = {}
+
+    status.gameInstance = status.gameInstance or Statics:GetGameInstance(uevrUtils.getWorld())
+    if status.gameInstance ~= nil and status.gameInstance.GameLayout ~= nil then
+        local layout = status.gameInstance.GameLayout
+        for _, widgetName in pairs(widgetNames) do
+            local widget = layout[widgetName]
+             if widget ~= nil and ((widget:IsVisible() and widget.WidgetTree.RootWidget:GetVisibility() == 0) or (widget:IsVisible() and widget:GetVisibility() == 4 and widget.WidgetTree.RootWidget:GetVisibility() == 4)) then
+                table.insert(result, {name = widgetName, widget = widget})
+            end
+        end
+        local radialMenu = layout.InGameOverlay and layout.InGameOverlay.RadialMenuWidget
+        if radialMenu ~= nil and layout.InGameOverlay:IsVisible() and radialMenu:IsVisible() then
+            layout.InGameOverlay.BlackBackground:SetVisibility(1)
+            table.insert(result, {name = "RadialMenuWidget", widget = radialMenu})
+        end
+     end
+    return result
+end
+getTopLevelWidgetsOnScreen = uevrUtils.profiler:wrap('main.getTopLevelWidgetsOnScreen', getTopLevelWidgetsOnScreen)
+
+local function updateScreenWidgets()
+    local widgetNames = {
+        "EmptyScreen",
+        "StartScreen",
+        "ShaderCompileScreen",
+        "MainMenu",
+        "LoadingScreen",
+        "EndScreen",
+        "InGameOverlay",
+        "CutsceneOverlay",
+        "CharacterScreen",
+        "DeathScreen",
+        "ExitLevelScreen",
+        "SaveScreen",
+        "AlchemyPanel",
+        "TravelMapPanel",
+        "SubtitleAndFlavorContainerWidget",
+        "ConfirmationScreen"
+    }
+
+	local widgets = getTopLevelWidgetsOnScreen(widgetNames)
+    local currentWidgets = {}
+	for i, widgetInfo in ipairs(widgets) do
+		local widget = widgetInfo.widget
+		local widgetKey = tostring(widget) --keys look like sol.uevr::API::UObject*: 00000233A4B9FEA8
+		local isShown = true --widget:IsShown()
+		currentWidgets[widgetKey] = {widget = widget, isShown = isShown}
+
+		-- Check if this is a new widget or state changed
+		local previousState = screenWidgets[widgetKey]
+		if previousState == nil or previousState.isShown ~= isShown then
+			-- State changed - update viewport accordingly
+			if isShown then
+				ui.addViewportWidget(widget)
+			else
+				ui.removeViewportWidget(widget)
+			end
+		end
+	end
+
+	-- Check for removed widgets and clean up
+	for widgetKey, widgetData in pairs(screenWidgets) do
+		if currentWidgets[widgetKey] == nil then
+			-- Widget was removed - remove from viewport if it was shown
+			if widgetData.isShown then
+				ui.removeViewportWidget(widgetData.widget)
+			end
+		end
+	end
+
+	-- Update the tracked widgets
+	screenWidgets = currentWidgets
+end
+
+local function wheelOpened()
+    status.isInRadialMenu = true
+    updateScreenWidgets()
+    ui.forceUpdate()
+end
+
 uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
 
+    -- Read the physical trigger before gameplay input remapping consumes it.
+    melee.setHeavyInput(state.Gamepad.bRightTrigger > 0 and not ui.isRemapDisabled())
     local handed = Handed.Right
 	local isEating, isGrabbingGlasses, gripHead, isGrabbingEar, triggerMouth, isScratchingEyes, triggerHead, isScratchingEar = gestures.getHeadGestures(state, 1-handed, false)
 	local isEatingRight, isGrabbingGlassesRight, gripHeadRight, isGrabbingEarRight, triggerMouthRight, isScratchingEyesRight, triggerHeadRight, isScratchingEarRight = gestures.getHeadGestures(state, handed, false)
@@ -569,7 +654,21 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_BACK), "TAB") --inventory
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_A), getInputMapping("Interact") or "E") --use
 
+    local isPressingY = uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_Y)
+    local isYJustPressed = isPressingY and not xInputStatus.isPressingY
+    xInputStatus.isPressingY = isPressingY
+
     if ui.isRemapDisabled() == true then
+        if status.isInRadialMenu == true then
+            keyboard.updateButtonState(isPressingY, "R") --wheel
+            if isYJustPressed then
+                status.isInRadialMenu = false
+            end
+            --by keeping this active the right controller can select items in the radial menu
+            state.Gamepad.sThumbLY = 32000
+            return
+        end
+
         --keyboard.updateShortLongButtonState(false, "C", "T", "switchWeaponsButton", LONG_PRESS_SECONDS)
         keyboard.updateToggleState(state.Gamepad.bRightTrigger > 0, "LCLICK") -- right trigger simulates mouse clicks
         keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_LEFT_SHOULDER), "1") -- category left
@@ -586,6 +685,21 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
                 keyboard.setInput("KeyPress", "TAB")
             end
             xInputStatus.isScratchingEar = isScratchingEar
+        end
+
+        -- right stick scrolls whichever vertical scroll box the controller mouse is over
+        if math.abs(state.Gamepad.sThumbRY) > STICK_DEADZONE then
+            for _, scrollBox in ipairs(uevrUtils.find_all_of("Class /Script/UMG.ScrollBox", false)) do
+                -- the ScrollBox's own hover flag stays false (e.g. inside an InvalidationBox); its parent's is reliable
+                local parent = scrollBox:GetParent()
+                if scrollBox.Orientation == 1 and parent ~= nil and parent:IsHovered() then
+                    local maxOffset = scrollBox:GetScrollOffsetOfEnd()
+                    if maxOffset > 0 then
+                        scrollBox:SetScrollOffset(math.max(0, math.min(maxOffset, scrollBox:GetScrollOffset() - state.Gamepad.sThumbRY / 32767 * 15)))
+                        break
+                    end
+                end
+            end
         end
 
         --dont let the right stick control the mouse when the interactive UI is showing
@@ -663,7 +777,10 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
     --keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_RIGHT_SHOULDER), getInputMapping("bLock") or "R") -- block/parry
     keyboard.updateToggleState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_RIGHT_SHOULDER), "RCLICK") -- block/parry
     keyboard.updateShortLongButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_X), "C", "T", "switchWeaponsButton", LONG_PRESS_SECONDS) --switch weapons
-    keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_Y), "X") --change spell
+    keyboard.updateButtonState(isPressingY, "R") --wheel
+    if isYJustPressed then
+        delay(50, wheelOpened)
+    end
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_DPAD_UP), getInputMapping("QuickbarOne") or "1") --use 1
     keyboard.updateButtonState(triggerMouth, getInputMapping("QuickbarOne") or "1") --use 1  
     keyboard.updateButtonState(uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_DPAD_DOWN), getInputMapping("QuickbarFour") or "4") --use 4
@@ -684,21 +801,6 @@ uevrUtils.registerOnPreInputGetStateCallback(function(retval, user_index, state)
         elseif isPressingLeftTrigger or uevrUtils.isButtonPressed(state, XINPUT_GAMEPAD_LEFT_SHOULDER) then
             setDefaultTargeting(Handed.Left)
         end
-    end
-
-    if status["hasSwipeRight"] or status["hasSwipeLeft"] then
-        local lclick = getInputMapping("PrimaryAction") or "LCLICK"
-        if isPressingRightTrigger then
-            state.Gamepad.bRightTrigger = 0
-            keyboard.setInput("KeyDown", lclick)
-            delay(math.floor(LONG_PRESS_SECONDS * 1000), function()
-                keyboard.setInput("KeyUp", lclick)
-            end)
-        else
-            keyboard.setInput("KeyPress", lclick)
-        end
-        status["hasSwipeRight"] = false
-        status["hasSwipeLeft"] = false
     end
 
 end, 5) --increased priority to get values before remap occurs
@@ -788,6 +890,9 @@ end
 
 uevr.sdk.callbacks.on_pre_engine_tick(function(engine, delta)
     checkPlayState()
+    melee.update(pawnModule.getPawn() or uevr.api:get_local_pawn(0),
+        attachments.getCurrentGrippedAttachment(Handed.Right), delta,
+        attachments.isActiveAttachmentMelee(Handed.Right) and not ui.isRemapDisabled())
     --the game somehow messes with the poseable mesh's root bone rotation after an animation, possiblly
     --because it has a shared skeleton with the source skeletal mesh component, so this compensates 
     --for that by resetting it every tick
@@ -803,26 +908,34 @@ uevr.sdk.callbacks.on_pre_engine_tick(function(engine, delta)
     end
 end)
 
+-- uevr.sdk.callbacks.on_post_engine_tick(function(engine, delta)
+--     if uevrUtils.getValid(pawn,{"Mesh"}) ~= nil then
+--         if status.isPlayingAttackMontage then
+--             local controllerRotation = controllers.getControllerRotation(Handed.Right)
+--             local rootRotation = pawn.RootComponent:K2_GetComponentRotation()
+--             if controllerRotation ~= nil then
+--                 local hitOffset = configui.getValue("hit_offset")
+--                 if hitOffset ~= nil then
+--                     pawn.Mesh.RelativeRotation.Pitch = -mathLib.normalizeDeg180((-controllerRotation.Pitch + hitOffset.X))
+--                     pawn.Mesh.RelativeRotation.Yaw = controllerRotation.Yaw - rootRotation.Yaw - 90 + hitOffset.Y --+ offset.Pitch
+--                     pawn.Mesh.RelativeRotation.Roll = hitOffset.Z ---controllerRotation.Pitch - 60
+--                 end
+--             end
+--         else--if not status.isPlayingCinematicMontage then
+--             pawn.Mesh.RelativeRotation.Pitch = 0
+--             pawn.Mesh.RelativeRotation.Yaw = -90
+--             pawn.Mesh.RelativeRotation.Roll = 10
+--         end
+
+--         --pawn.AttributeComponent:FullHealAllResources()
+--     end
+-- end)
+
 uevr.sdk.callbacks.on_post_engine_tick(function(engine, delta)
     if uevrUtils.getValid(pawn,{"Mesh"}) ~= nil then
-        if status.isPlayingAttackMontage then
-            local controllerRotation = controllers.getControllerRotation(Handed.Right)
-            local rootRotation = pawn.RootComponent:K2_GetComponentRotation()
-            if controllerRotation ~= nil then
-                local hitOffset = configui.getValue("hit_offset")
-                if hitOffset ~= nil then
-                    pawn.Mesh.RelativeRotation.Pitch = -mathLib.normalizeDeg180((-controllerRotation.Pitch + hitOffset.X))
-                    pawn.Mesh.RelativeRotation.Yaw = controllerRotation.Yaw - rootRotation.Yaw - 90 + hitOffset.Y --+ offset.Pitch
-                    pawn.Mesh.RelativeRotation.Roll = hitOffset.Z ---controllerRotation.Pitch - 60
-                end
-            end
-        else--if not status.isPlayingCinematicMontage then
-            pawn.Mesh.RelativeRotation.Pitch = 0
-            pawn.Mesh.RelativeRotation.Yaw = -90
-            pawn.Mesh.RelativeRotation.Roll = 10
-        end
-
-        --pawn.AttributeComponent:FullHealAllResources()
+        pawn.Mesh.RelativeRotation.Pitch = 0
+        pawn.Mesh.RelativeRotation.Yaw = -90
+        pawn.Mesh.RelativeRotation.Roll = 10
     end
 end)
 
@@ -848,75 +961,9 @@ end)
 
 configui.create(configDefinition)
 
-local function getTopLevelWidgetsOnScreen(widgetNames)
-    local result = {}
 
-    local gameInstance = Statics:GetGameInstance(uevrUtils.getWorld())
-    if gameInstance ~= nil and gameInstance.GameLayout ~= nil then
-         local layout = gameInstance.GameLayout
-        for _, widgetName in pairs(widgetNames) do
-            local widget = layout[widgetName]
-             if widget ~= nil and ((widget:IsVisible() and widget.WidgetTree.RootWidget:GetVisibility() == 0) or (widget:IsVisible() and widget:GetVisibility() == 4 and widget.WidgetTree.RootWidget:GetVisibility() == 4)) then
-                table.insert(result, {name = widgetName, widget = widget})
-            end
-        end
-     end
-    return result
-end
+setInterval(1000, updateScreenWidgets)
 
-local screenWidgets = {}
-setInterval(2000, function()
-    local widgetNames = {
-        "EmptyScreen",
-        "StartScreen",
-        "ShaderCompileScreen",
-        "MainMenu",
-        "LoadingScreen",
-        "EndScreen",
-        "InGameOverlay",
-        "CutsceneOverlay",
-        "CharacterScreen",
-        "DeathScreen",
-        "ExitLevelScreen",
-        "SaveScreen",
-        "AlchemyPanel",
-        "TravelMapPanel",
-        "SubtitleAndFlavorContainerWidget",
-        "ConfirmationScreen"
-    }
-
-	local widgets = getTopLevelWidgetsOnScreen(widgetNames)
-    local currentWidgets = {}
-	for i, widgetInfo in ipairs(widgets) do
-		local widget = widgetInfo.widget
-		local widgetKey = tostring(widget) --keys look like sol.uevr::API::UObject*: 00000233A4B9FEA8
-		local isShown = true --widget:IsShown()
-		currentWidgets[widgetKey] = {widget = widget, isShown = isShown}
-
-		-- Check if this is a new widget or state changed
-		local previousState = screenWidgets[widgetKey]
-		if previousState == nil or previousState.isShown ~= isShown then
-			-- State changed - update viewport accordingly
-			if isShown then
-				ui.addViewportWidget(widget)
-			else
-				ui.removeViewportWidget(widget)
-			end
-		end
-	end
-
-	-- Check for removed widgets and clean up
-	for widgetKey, widgetData in pairs(screenWidgets) do
-		if currentWidgets[widgetKey] == nil then
-			-- Widget was removed - remove from viewport if it was shown
-			if widgetData.isShown then
-				ui.removeViewportWidget(widgetData.widget)
-			end
-		end
-	end
-
-	-- Update the tracked widgets
-	screenWidgets = currentWidgets
-
+uevr.params.sdk.callbacks.on_script_reset(function()
+	cleanup()
 end)
-
