@@ -94,6 +94,10 @@ Usage
         example:
             local pos, rot, scale = attachments.getAttachmentOffset(myAttachment)
 
+    attachments.getAttachmentOffsetByID(id) - gets the stored offset table for an attachment id (location, rotation, scale, etc.), or nil
+        example:
+            local offset = attachments.getAttachmentOffsetByID("BP_WandTool_C_Mesh")
+
     attachments.updateAttachmentTransform(pos, rot, scale, id) - updates an attachment's transform
         example:
             attachments.updateAttachmentTransform({0,0,0}, {0,0,0}, {1,1,1}, "WP_BerettaAuto9_C_Beretta_Mesh")
@@ -1026,6 +1030,10 @@ local function getAttachmentOffsetByID(id)
 	return nil
 end
 getAttachmentOffsetByID = uevrUtils.profiler:wrap("Attachments: getAttachmentOffsetByID", getAttachmentOffsetByID)
+
+function M.getAttachmentOffsetByID(id)
+	return getAttachmentOffsetByID(id)
+end
 
 function M.getAttachmentOffset(attachment)
 	local attachmentLocation = {0,0,0}

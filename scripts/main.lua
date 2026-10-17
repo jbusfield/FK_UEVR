@@ -61,7 +61,7 @@ local HandsType = {
 	-- IKArms = 3,
 }
 
-local versionTxt = "v1.0.2"
+local versionTxt = "v1.0.3"
 local title = "FateKeeper, First Person Mod " .. versionTxt
 local configDefinition = {
 	{
@@ -254,6 +254,7 @@ local function getWeaponMesh()
                 if assetName:find('/Weapons/', 1, true) then
                     status.currentWeapon = candidate
                     status.currentWeaponStaticMeshName = assetName
+                    candidate:SetVisibility(true, false)
                     return candidate
                 end
             end
@@ -483,12 +484,13 @@ montage.registerMontageChangeCallback(function(montageObject, montageName, label
         status.isPlayingCinematicMontage = false
     end
 
-    -- if montageName contains "_Unequip" then hide the equipped weapon
+    -- if montageName contains "_Equip" then hide the equipped weapon
     -- makes the transition look nicer
     if montageName ~= "" and montageName:find("_Equip", 1, true) then
-        --print("Unequip montage detected, hiding weapon")
-        if status.currentWeapon ~= nil then
-            status.currentWeapon:SetVisibility(false, false)
+        local previousName = status.currentWeaponStaticMeshName
+        local weaponMesh = getWeaponMesh()
+        if weaponMesh ~= nil and status.currentWeaponStaticMeshName ~= previousName then
+            weaponMesh:SetVisibility(false, false)
         end
     end
 

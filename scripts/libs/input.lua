@@ -39,7 +39,8 @@ Usage
 			input.print("Hello", LogLevel.Debug)
 
 	input.setDisabled(val) - overrides enable/disable for the whole input body/aim system.
-		When disabled (true), clears decoupledYaw/bodyRotationOffset so re-enable re-inits facing.
+		When disabled (true), restores any pawn/camera flags input overrode to their pre-override
+		(vanilla) values, and clears decoupledYaw/bodyRotationOffset so re-enable re-inits facing.
 		example:
 			input.setDisabled(true)
 
@@ -752,18 +753,21 @@ local cameraComponent = {
 ]]--
 
 local pawnSettings = nil
+-- Restores pawn/camera flags that updatePawnSettings overrode, then clears the cache.
+-- Retries are safe: if the pawn isn't ready yet, pawnSettings stays set for a later attempt.
 local function resetPawnSettings()
 	cameraComponent:reset()
-	local pawn = uevrUtils.getValid(status.pawn)
-	if pawn ~= nil and pawnSettings ~= nil and pawn.bUseControllerRotationPitch ~= nil then
-		--restore pawn settings
-		--print("Restoring pawn settings")
-		pawn.bUseControllerRotationPitch = pawnSettings.bUseControllerRotationPitch
-		pawn.bUseControllerRotationYaw = pawnSettings.bUseControllerRotationYaw
-		pawn.bUseControllerRotationRoll = pawnSettings.bUseControllerRotationRoll
-		if pawn.CharacterMovement ~= nil then
-			pawn.CharacterMovement.bOrientRotationToMovement = pawnSettings.bOrientRotationToMovement
-			pawn.CharacterMovement.bUseControllerDesiredRotation = pawnSettings.bUseControllerDesiredRotation
+	local currentPawn = uevrUtils.getValid(status.pawn) or uevrUtils.getValid(pawnModule.getPawn() or pawn)
+	if currentPawn ~= nil then
+		status.pawn = currentPawn
+	end
+	if currentPawn ~= nil and pawnSettings ~= nil and currentPawn.bUseControllerRotationPitch ~= nil then
+		currentPawn.bUseControllerRotationPitch = pawnSettings.bUseControllerRotationPitch
+		currentPawn.bUseControllerRotationYaw = pawnSettings.bUseControllerRotationYaw
+		currentPawn.bUseControllerRotationRoll = pawnSettings.bUseControllerRotationRoll
+		if currentPawn.CharacterMovement ~= nil then
+			currentPawn.CharacterMovement.bOrientRotationToMovement = pawnSettings.bOrientRotationToMovement
+			currentPawn.CharacterMovement.bUseControllerDesiredRotation = pawnSettings.bUseControllerDesiredRotation
 		end
 		pawnSettings = nil
 	end
@@ -1095,7 +1099,17 @@ function M.setDisabled(val)
 		decoupledYaw = nil
 		bodyRotationOffset = 0
 		lastBodyYawUpdateTime = nil
-		--M.reset()
+		-- Restore immediately so callers don't depend on the next tick edge.
+		if not isDisabled then
+			isDisabled = true
+			uevrUtils.executeUEVRCallbacks("recenter_view")
+			if preventPawnSettingsResetOnDisable == false then
+				resetPawnSettings()
+			end
+			M.updateMeshRelativePosition(true)
+		elseif preventPawnSettingsResetOnDisable == false then
+			resetPawnSettings()
+		end
 	end
 end
 
@@ -1763,10 +1777,18 @@ local function updateIsDisabled()
 		isDisabled = disabled
 		--uevr.params.vr.recenter_view()
 		uevrUtils.executeUEVRCallbacks("recenter_view")
-		if preventPawnSettingsResetOnDisable == false then
-			resetPawnSettings()
+		if disabled then
+			decoupledYaw = nil
+			bodyRotationOffset = 0
+			lastBodyYawUpdateTime = nil
+			if preventPawnSettingsResetOnDisable == false then
+				resetPawnSettings()
+			end
+			updateMeshRelativePosition(true)
 		end
-		updateMeshRelativePosition(true)
+	elseif disabled and preventPawnSettingsResetOnDisable == false and pawnSettings ~= nil then
+		-- Disable already active but restore hasn't landed yet (pawn wasn't ready).
+		resetPawnSettings()
 	end
 end
 
