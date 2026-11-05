@@ -1041,11 +1041,7 @@ uevrUtils.registerUEVRCallback("gunstock_transform_change", function(id, newLoca
 	if gunstockOffsetsEnabled then
 		local hand = M.getHandComponent(Handed.Right)
 		if hand ~= nil then
-			if baseRotation ~= nil then
-				hand.RelativeRotation = mathLib.composeRotators(baseRotation, newRotation)
-			else
-				hand.RelativeRotation = newRotation
-			end
+			hand.RelativeRotation = mathLib.composeRotators(baseRotation, uevrUtils.rotator(baseOffset), newRotation)
 		end
 	end
 end)
@@ -1442,11 +1438,9 @@ local function attachHandToTarget(handed, parentAttachment, socketName, attachTy
 				end
 				local finalLocation = loc and ({loc[1] * socketScale[1], loc[2] * socketScale[2], loc[3] * socketScale[3]}) or {0,0,0}
 				handObj:K2_AttachTo(parentAttachment, uevrUtils.fname_from_string(socketName or ""), attachType or 0, false)
-				if baseRotation ~= nil then
-					uevrUtils.set_component_relative_transform(handObj, finalLocation, mathLib.composeRotators(baseRotation, uevrUtils.rotator(rot) or uevrUtils.rotator(0,0,0)), socketScale)
-				else
-					uevrUtils.set_component_relative_transform(handObj, finalLocation, rot or {0,0,0}, socketScale)
-				end
+				-- Same order as the gunstock path: the hand's own rotation (mesh base + profile Offset), then the accessory marker
+				local offsetRotation = baseOffset ~= nil and uevrUtils.rotator(baseOffset) or nil
+				uevrUtils.set_component_relative_transform(handObj, finalLocation, mathLib.composeRotators(baseRotation, offsetRotation, uevrUtils.rotator(rot or {0,0,0})), socketScale)
 				--print("Attached hand to accessory with socket: ", handObj:K2_GetComponentScale().X)
 			end
 		end

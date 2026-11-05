@@ -25,7 +25,7 @@ function M.get_class(name, clearCache)
 	if name == nil then return nil end
 	if clearCache or classCache[name] == nil then
 		local ok, result = pcall(function()
-			return uevr.api:find_uobject(name)
+			return M.find_required_object(name)
 		end)
 		if not ok then
 			print("[uevr_lib] Error finding class in get_class handled properly", name, result)
@@ -135,5 +135,6 @@ function M.find_instance_of(className, objectName)
 	end
 	return nil
 end
+
 
 return M

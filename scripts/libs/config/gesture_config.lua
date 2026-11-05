@@ -14,6 +14,9 @@ local configDefaults = {
 	swing = {
 		minThresholdSpeed = 180,
 	},
+	flick = {
+		minThresholdAngleSpeed = 400,
+	},
 }
 
 local function getNested(tbl, path)
@@ -46,6 +49,7 @@ local function getConfigWidgets()
 	return spliceableInlineArray{
 		intWidget({"swipe", "minThresholdSpeed"}, "Swipe Min Speed", {0, 2000}),
 		intWidget({"swing", "minThresholdSpeed"}, "Swing Min Speed", {0, 2000}),
+		intWidget({"flick", "minThresholdAngleSpeed"}, "Min Angle Speed (deg/s)", {0, 3000}),
 	}
 end
 
@@ -81,6 +85,14 @@ end)
 
 configui.onCreate(widgetPrefix .. "swing_minThresholdSpeed", function()
 	configui.setValue(widgetPrefix .. "swing_minThresholdSpeed", valueFor({"swing", "minThresholdSpeed"}), true)
+end)
+
+configui.onUpdate(widgetPrefix .. "flick_minThresholdAngleSpeed", function(value)
+	updateSetting({"flick", "minThresholdAngleSpeed"}, value)
+end)
+
+configui.onCreate(widgetPrefix .. "flick_minThresholdAngleSpeed", function()
+	configui.setValue(widgetPrefix .. "flick_minThresholdAngleSpeed", valueFor({"flick", "minThresholdAngleSpeed"}), true)
 end)
 
 local function selectWidgets(widgets, selections)
@@ -133,6 +145,10 @@ function M.init(m_paramManager)
 			local swing = profileParams and profileParams.swing
 			if swing ~= nil and swing.minThresholdSpeed ~= nil then
 				configui.setValue(widgetPrefix .. "swing_minThresholdSpeed", swing.minThresholdSpeed, true)
+			end
+			local flick = profileParams and profileParams.flick
+			if flick ~= nil and flick.minThresholdAngleSpeed ~= nil then
+				configui.setValue(widgetPrefix .. "flick_minThresholdAngleSpeed", flick.minThresholdAngleSpeed, true)
 			end
 		end)
 	end

@@ -1114,6 +1114,30 @@ local function proximityAccessoryForHand(hand)
     return selectAccessoryForSource(hand, attachment, attachmentID, list, attachmentSelections, attachmentID)
 end
 
+-- True when the hand already holds an accessory, or a grip pressed now would attach one.
+-- Other grip users can call this on a press, before the activation poll sees it.
+function M.isGripHandEngaged(hand)
+	if hand ~= Handed.Left and hand ~= Handed.Right then return false end
+	if accessoryStatus.targetAccessories ~= nil and accessoryStatus.targetAccessories[hand] ~= nil then return true end
+	if accessoryStatus[hand == Handed.Left and "activeLeftAccessory" or "activeRightAccessory"] ~= nil then return true end
+	if isDisabled then return false end
+	local handLocation = controllers.getControllerLocation(hand)
+	if handLocation == nil then return false end
+	-- Same source order as the poll: a provided target replaces the gripped attachment.
+	local target, configKey = getProvidedTarget(hand)
+	if target ~= nil then
+		if type(configKey) ~= "string" or configKey == "" then return false end
+		local list = M.getAccessoriesForAttachment(configKey)
+		return list ~= nil and closestAccessory(hand, target, nil, list, handLocation, 11, 16) ~= nil
+	end
+	local attachment = attachments.getCurrentGrippedAttachment(Handed.Right)
+	if attachment == nil then return false end
+	local attachmentID = attachments.getAttachmentIDFromAttachment(attachment)
+	if attachmentID == nil or attachmentID == "" then return false end
+	local list = M.getAccessoriesForAttachment(attachmentID)
+	return list ~= nil and closestAccessory(hand, attachment, attachmentID, list, handLocation, 11, 16) ~= nil
+end
+
 -- Feed proximity as another "opinion" into the same montage/preview resolution path.
 uevrUtils.registerUEVRCallback("active_left_accessory", function()
 	local id = proximityAccessoryForHand(Handed.Left)

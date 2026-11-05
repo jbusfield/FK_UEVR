@@ -619,6 +619,33 @@ function M.addComponent(actorObject, componentClass)
     return nil
 end
 
+-- UEVR's Lua binds no get_aim_pose/get_grip_pose, so the plugin reads both poses natively.
+-- hand is "left" or "right". Returns the aim rotation relative to the grip pose
+-- ({X, Y, Z, W}, aim = grip * offset), or nil while either pose is untracked.
+function M.getControllerAimOffset(hand)
+    if hand ~= "left" and hand ~= "right" then
+        print("[plugin]Error: getControllerAimOffset hand must be left or right")
+        return nil
+    end
+
+    local callID = "GetControllerAimOffset_" .. guid()
+    AsyncRegistry[callID] = {
+        completed = false,
+        finalResult = nil,
+        registeredCallback = nil,
+        delayedCleanup = false
+    }
+
+    uevr.api:dispatch_custom_event(callID, json.dump_string({ debug = M.showDebug, hand = hand }))
+
+    local result = AsyncRegistry[callID].finalResult
+    AsyncRegistry[callID] = nil
+    if type(result) == "table" then
+        return result.offset
+    end
+    return nil
+end
+
 uevr.sdk.callbacks.on_lua_event(function(eventName, eventData)
     if M.showDebug then print("on_lua_event", eventName, eventData) end
     local id = eventName

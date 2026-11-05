@@ -133,6 +133,32 @@ Usage
 	uevrUtils.enableDebug(val) - enables/disables debug logging (true = LogLevel.Debug, false = LogLevel.Off)
 		example:
 			uevrUtils.enableDebug(true)  -- Enable debug logging
+
+	uevrUtils.profiler - lightweight call-timing helper for finding hot paths. Off by default so wrap() is a
+		near-zero-cost passthrough until enabled. Wrap functions at definition time, toggle on when diagnosing,
+		then report() to print accumulated call counts and millisecond totals/averages.
+		Methods:
+			uevrUtils.profiler:wrap(name, func) - returns a wrapped func that records elapsed time under name
+				when profiling is enabled. Replace the original with the wrapped result.
+			uevrUtils.profiler:toggle(enable) - enables (true) or disables (false) profiling. Disabling clears
+				accumulated counts/times.
+			uevrUtils.profiler:report(sortBy) - prints a summary for each wrapped name (calls, total ms, avg ms).
+				sortBy is optional: "avg" (default, highest avg first) or "alpha" (A-Z by name).
+				No-op when profiling is disabled.
+		example:
+			-- In a lib, wrap hot functions once after defining them:
+			local function updateAim(...)
+				-- ...
+			end
+			updateAim = uevrUtils.profiler:wrap("updateAim", updateAim)
+
+			-- In main.lua while diagnosing:
+			uevrUtils.profiler:toggle(true)
+			register_key_bind("F1", function()
+				uevrUtils.profiler:report()        -- hottest avg first
+				-- uevrUtils.profiler:report("alpha")
+			end)
+			-- When done: uevrUtils.profiler:toggle(false)
 			
 	uevrUtils.getEngineVersion() - returns the current Unreal Engine version number as a string
 		example:
@@ -224,6 +250,25 @@ Usage
 		example:
 			local pos = pawn:K2_GetActorLocation()
 			local actor = uevrUtils.spawn_actor( uevrUtils.get_transform({X=pos.X, Y=pos.Y, Z=pos.Z}), 1, nil)
+
+	uevrUtils.setActorTag(actor, tag, (optional)enabled) - adds (enabled true or nil) or removes (enabled false) a tag on an actor.
+		Actor tags survive Reset Scripts, so tagging the actors a script creates lets it find them again after a reset.
+		Returns true if the actor ends up with the requested tag state. Requires the plugin
+		example:
+			uevrUtils.setActorTag(actor, "MyMod.SpawnedActor")
+
+	uevrUtils.transferActorTag(tag, actor, previousActor) - for a tag that identifies a single actor, adds the tag to actor and
+		removes it from previousActor. If the tag cannot be removed from previousActor, actor is returned to its original state
+		and false is returned
+		example:
+			if uevrUtils.transferActorTag("MyMod.CurrentBoat", boat, currentBoat) then currentBoat = boat end
+
+	uevrUtils.getTaggedActors(className, tag, (optional)worldContext) - returns an array of the actors of className (or of any class
+		if className is nil) that have the tag. Returns nil if the query could not be run, so a failure is not mistaken for no actors.
+		Requires the plugin
+		example:
+			local actors = uevrUtils.getTaggedActors("BlueprintGeneratedClass /Game/BP_Boat.BP_Boat_C", "MyMod.SpawnedActor")
+			if actors ~= nil and #actors == 0 then spawnBoat() end
 		
 	uevrUtils.getValid(object, (optional)properties) -- returns a valid object or property of an object or nil if none is found. Use this
 		in place of endless nested checks for nil on objects and their properties. Properties are passed in as an array of hierarchical 
@@ -258,6 +303,21 @@ Usage
 		example:
 			local mesh = uevrUtils.find_instance_of("Class /Script/Engine.StaticMesh", "StaticMesh /Engine/EngineMeshes/Sphere.Sphere")
 			local mesh = uevrUtils.find_instance_of("Class /Script/Engine.StaticMesh", "Sphere")
+	
+	uevrUtils.getSafeInstanceOf(className, name) - find the named object of the given className, preferring a direct path lookup over
+		find_instance_of's scan of every loaded object of that class. A full path ("Class /Path/Package.Object") is tried with getLoadedAsset
+		first, which resolves objects already in memory (assets and other objects, such as widget instances) without a scan, and loads
+		assets that are not loaded yet. The result is only used if it is of className or a subclass; otherwise, and for short names, it
+		falls back to find_instance_of. Never calls find_uobject, so a missing object cannot cause its lookup stall. Returns nil if
+		className or name is nil or empty.
+		examples:
+			local mesh = uevrUtils.getSafeInstanceOf("Class /Script/Engine.StaticMesh", "StaticMesh /Engine/EngineMeshes/Sphere.Sphere")
+			local material = uevrUtils.getSafeInstanceOf("Class /Script/Engine.MaterialInterface", "Material /Engine/EngineMaterials/Widget3DPassThrough.Widget3DPassThrough")
+	
+	uevrUtils.isInstanceOfClassName(obj, className) - true if obj's class, or one of its parent classes, has the given full class name.
+		Walks obj's own class chain, so unlike obj:is_a(uevrUtils.get_class(className)) it never looks up the class by name.
+		example:
+			if uevrUtils.isInstanceOfClassName(obj, "Class /Script/Engine.MaterialInterface") then ... end
 	
 	uevrUtils.find_first_of(className, (optional)includeDefault) - find the first object instance of the given className
 		example:
@@ -1026,13 +1086,15 @@ end
 local updateKeyPressWarningShown = false
 local function updateKeyPress()
 	local pc = nil
-	local keyStruct = nil
 	for key, elem in pairs(keyBindList) do
 		if pc == nil then pc = uevr.api:get_player_controller(0) end -- dont allocate until we know its needed
 		if uevrLib.extremeCompatibilityMode == false then
-			if keyStruct == nil then keyStruct = M.get_reuseable_struct_object("ScriptStruct /Script/InputCore.Key") end
-			keyStruct.KeyName = M.fname_from_string(key)
-			if pc ~= nil and pc:IsInputKeyDown(keyStruct) then
+			-- Each bind keeps its own Key struct so the key name is converted once instead of every tick
+			if elem.keyStruct == nil then
+				elem.keyStruct = M.get_struct_object("ScriptStruct /Script/InputCore.Key")
+				if elem.keyStruct ~= nil then elem.keyStruct.KeyName = M.fname_from_string(key) end
+			end
+			if pc ~= nil and elem.keyStruct ~= nil and pc:IsInputKeyDown(elem.keyStruct) then
 				if elem.isPressed == false then
 					elem.func()
 					elem.isPressed = true
@@ -1165,6 +1227,8 @@ local function updateTimer(delta)
 	end
 end
 
+-- Call-timing profiler. See Usage docs above for wrap / toggle / report.
+-- Wrap at definition time; enable only while diagnosing (off = passthrough).
 M.profiler = {
     enabled = false,
     counts = {},
@@ -1195,14 +1259,23 @@ M.profiler = {
         end
     end,
 
-    report = function(self)
+    report = function(self, sortBy)
         if not self.enabled then return end
-        print("\n=== Profiling Report ===")
+        sortBy = sortBy or "avg"
+        local rows = {}
         for name, count in pairs(self.counts) do
             local total = self.totalTimes[name]
-            local avg = total / count
+            rows[#rows + 1] = {name = name, count = count, total = total, avg = total / count}
+        end
+        if sortBy == "alpha" then
+            table.sort(rows, function(a, b) return a.name < b.name end)
+        else
+            table.sort(rows, function(a, b) return a.avg > b.avg end)
+        end
+        print("\n=== Profiling Report ===")
+        for _, row in ipairs(rows) do
             print(string.format("%s: %d calls, %.3f ms total, %.3f ms avg",
-                name, count, total, avg))
+                row.name, row.count, row.total, row.avg))
         end
         print("========================\n")
     end
@@ -1767,6 +1840,9 @@ function M.initUEVR(UEVR, callbackFunc)
 	temp_transform = M.get_reuseable_struct_object("ScriptStruct /Script/CoreUObject.Transform")
 
 	uevr.sdk.callbacks.on_xinput_get_state(function(retval, user_index, state)
+		-- Only slot 0 carries the VR controllers. The game also polls slots 1-3 every frame, where everything reads released,
+		-- which breaks any callback that tracks presses across calls.
+		if user_index ~= 0 then return end
 		executeUEVRCallbacks("onPreInputGetState", retval, user_index, state)
 
 		if on_xinput_get_state ~= nil then
@@ -2359,7 +2435,7 @@ end
 
 function M.getComponentLocation(component)
 	if uevrLib.extremeCompatibilityMode == false then
-		return component:K2_GetComponentLocation()
+		return component ~= nil and component.K2_GetComponentLocation ~= nil and component:K2_GetComponentLocation() or nil
 	else
 		if checkPluginExists() then
 			---@diagnostic disable-next-line: need-check-nil
@@ -2672,21 +2748,14 @@ function M.spawn_actor(transform, collisionMethod, owner, tag)
     return actor
 end
 
+-- Native calls cannot fill the OutActors TArray, so these use getTaggedActors.
+-- Unlike getTaggedActors, they return an empty table if the query fails
 function M.getAllActorsWithTag(tag)
-	local actors = {}
-	Statics:GetAllActorsWithTag(M.get_world(), M.fname_from_string(tag), actors)
-	--print("getAllActorWithTag",#actors)
-	return actors
+	return M.getTaggedActors(nil, tag) or {}
 end
 
 function M.getAllActorsOfClassWithTag(className, tag)
-	local actors = {}
-	local class = M.get_class(className)
-	if class ~= nil then
-		Statics:GetAllActorsOfClassWithTag(M.get_world(), class, M.fname_from_string(tag), actors)
-	end
-	--print("getAllActorsOfClassWithTag",#actors)
-	return actors
+	return M.getTaggedActors(className, tag) or {}
 end
 
 function M.getAllActorsOfClass(className)
@@ -2699,6 +2768,63 @@ function M.getAllActorsOfClass(className)
 	return actors
 end
 
+-- Actor tags survive Reset Scripts, so tagged actors can be found again with getTaggedActors.
+-- Tags and OutActors are TArrays, which native Lua cannot marshal, so these need the plugin
+function M.setActorTag(actor, tag, enabled)
+	actor = M.getValid(actor)
+	if actor == nil then return false end
+	enabled = enabled ~= false
+	local tagName = M.fname_from_string(tag)
+	if actor:ActorHasTag(tagName) == enabled then return true end
+	if not checkPluginExists() then return false end
+	---@diagnostic disable-next-line: need-check-nil
+	local tags = plugin.getProperty(actor, "Tags")
+	if type(tags) ~= "table" then return false end
+	if enabled then
+		tags[#tags + 1] = tag
+	else
+		local lowerTag = string.lower(tag)
+		for i = #tags, 1, -1 do
+			-- FNames compare case-insensitively
+			if string.lower(tags[i]) == lowerTag then table.remove(tags, i) end
+		end
+	end
+	---@diagnostic disable-next-line: need-check-nil
+	plugin.setProperty(actor, "Tags", tags)
+	-- The setter does not report failure
+	return actor:ActorHasTag(tagName) == enabled
+end
+
+-- For a tag that identifies a single actor. On failure neither actor's tags are left changed
+function M.transferActorTag(tag, actor, previousActor)
+	actor = M.getValid(actor)
+	if actor == nil then return false end
+	local alreadyTagged = actor:ActorHasTag(M.fname_from_string(tag))
+	if not alreadyTagged and not M.setActorTag(actor, tag, true) then return false end
+	previousActor = M.getValid(previousActor)
+	if previousActor == nil or previousActor == actor or M.setActorTag(previousActor, tag, false) then return true end
+	if not alreadyTagged then M.setActorTag(actor, tag, false) end
+	return false
+end
+
+-- Returns nil rather than an empty table when the query cannot run, so a failure is not mistaken for
+-- "no actors". The class is looked up again because a level reload can replace a Blueprint class
+function M.getTaggedActors(className, tag, worldContext)
+	worldContext = worldContext or M.get_world()
+	if Statics == nil or worldContext == nil or not checkPluginExists() then return nil end
+	local result
+	if className == nil then
+		---@diagnostic disable-next-line: need-check-nil
+		result = plugin.executeFunction(Statics, "GetAllActorsWithTag", worldContext, tag, {})
+	else
+		local class = M.get_class(className, true)
+		-- An unloaded class has no instances
+		if class == nil then return {} end
+		---@diagnostic disable-next-line: need-check-nil
+		result = plugin.executeFunction(Statics, "GetAllActorsOfClassWithTag", worldContext, class, tag, {})
+	end
+	return result and result.OutActors
+end
 
 function M.getSocketNames(object, callback)
 	--if checkTArrayExists() then tArray.registerCallback(callback, "FName", object, "GetAllSocketNames()") end
@@ -3279,12 +3405,37 @@ end
     -- pressButton(state, XINPUT_GAMEPAD_DPAD_LEFT)
 -- end
 
-function M.getFilesInDirectory(directory)
+-- fs.glob regexes are case sensitive but Windows file names are not, so "png" becomes "[pP][nN][gG]"
+local function anyCasePattern(text)
+	return (text:gsub("%a", function(c) return "[" .. c:lower() .. c:upper() .. "]" end))
+end
+
+-- Files in a folder inside the data folder, as paths relative to data separated by backslashes.
+-- path is an ordinary folder path using / or \, with or without a trailing separator; nil or "" is data itself.
+-- extension matches in any case and nil matches every file. includeSubfolders also returns files in folders
+-- below path. Returns nil when fs.glob is unavailable.
+function M.getFiles(path, extension, includeSubfolders)
+	if fs == nil or fs.glob == nil then return nil end
+	local folder = (path or ""):gsub("[/\\]+", "\\"):gsub("^\\", ""):gsub("\\$", "")
+	local prefix = ""
+	if folder ~= "" then
+		-- folder names are literal, so escape regex characters, then add the separator
+		prefix = folder:gsub("([%^%$%(%)%.%[%]%*%+%?%{%}%|\\])", "\\%1") .. "\\\\"
+	end
+	local name = includeSubfolders and ".*" or "[^\\\\]*"
+	local suffix = extension ~= nil and ("\\." .. anyCasePattern(extension)) or ""
+	return fs.glob(prefix .. name .. suffix) or {}
+end
+
+-- directory is a regex for a folder inside data, with \\ between folders, or nil for data itself.
+-- With a directory, files in its subfolders also match. extension defaults to json and matches in any case
+function M.getFilesInDirectory(directory, extension)
 	local files = {}
+	local suffix = extension == nil and anyCasePattern("json") or ("\\." .. anyCasePattern(extension))
 	if directory ~= nil then
-		files = fs.glob(string.format([[%s\\.*json]], directory)) -- dev directory inside data
+		files = fs.glob(string.format([[%s\\.*%s]], directory, suffix)) -- dev directory inside data
 	else
-		files = fs.glob([[[^\\]*json]]) --root data directory
+		files = fs.glob([[[^\\]*]] .. suffix) --root data directory
 	end
 
 	--local json_files = fs.glob([[dev\\.*json]]) -- dev directory inside data
@@ -3737,6 +3888,29 @@ function M.detachAndDestroyComponent(component, destroyOwner, destroyChildren)
 	end
 end
 
+-- True if obj's class, or any of its parent classes, has this full name ("Class /Script/Engine.StaticMesh").
+-- Uses only the object's own class chain, so a wrong class name never triggers a find_uobject lookup.
+function M.isInstanceOfClassName(obj, className)
+	local cls = obj:get_class()
+	while cls ~= nil do
+		if cls:get_full_name() == className then return true end
+		cls = cls:get_super_struct()
+	end
+	return false
+end
+
+function M.getSafeInstanceOf(className, name)
+	if className == nil or className == "" or name == nil or name == "" then return nil end
+	local instance = M.getLoadedAsset(name)
+	if instance ~= nil and not M.isInstanceOfClassName(instance, className) then
+		instance = nil
+	end
+	if instance == nil then
+		instance = M.find_instance_of(className, name)
+	end
+	return instance
+end
+
 --options are manualAttachment, relativeTransform, deferredFinish, parent, tag, showDebug, useDefaultPose
 function M.createPoseableMeshFromSkeletalMesh(skeletalMeshComponent, options)
 	if options == nil then options = {} end
@@ -3792,7 +3966,7 @@ function M.createStaticMeshComponent(mesh, options)
 	local component = nil
 	if mesh ~= nil and (type(mesh) == "string" or mesh:is_a(M.get_class("Class /Script/Engine.StaticMesh"))) then
 		if type(mesh) == "string" then
-			mesh = M.find_instance_of("Class /Script/Engine.StaticMesh", mesh)
+			mesh = M.getSafeInstanceOf("Class /Script/Engine.StaticMesh", mesh) -- M.find_instance_of("Class /Script/Engine.StaticMesh", mesh)
 		end
 
 		if mesh ~= nil then --check mesh again because it changed if it was originally a string
@@ -3829,7 +4003,7 @@ function M.createSkeletalMeshComponent(mesh, options)
 	local component = nil
 	if mesh ~= nil and (type(mesh) == "string" or mesh:is_a(M.get_class("Class /Script/Engine.SkeletalMesh"))) then
 		if type(mesh) == "string" then
-			mesh = M.find_instance_of("Class /Script/Engine.SkeletalMesh", mesh)
+			mesh = M.getSafeInstanceOf("Class /Script/Engine.SkeletalMesh", mesh)
 		end
 
 		if mesh ~= nil then --check mesh again because it changed if it was originally a string
@@ -4033,9 +4207,19 @@ function M.createSceneCaptureComponent(options)
 	return component
 end
 
+-- A full-name lookup of an unloaded class scans every object; an unloaded Blueprint class has no instances.
+local function isWidgetClassLoaded(className)
+	if className == nil or className:find(" /Game/", 1, true) == nil then return true end
+	local data = M.getAssetDataFromPath(className)
+	local registry = M.find_first_of("Class /Script/AssetRegistry.AssetRegistryHelpers", true)
+	return data ~= nil and registry ~= nil and registry:IsAssetLoaded(data)
+end
+isWidgetClassLoaded = M.profiler:wrap("getActiveWidgetByClass: loaded check", isWidgetClassLoaded)
+
 -- Prefers a widget whose top level UserWidget is in the viewport, since stale copies (e.g. an old HUD after loading a save)
 -- can stay alive with the same owning pawn
 function M.getActiveWidgetByClass(className)
+	if not isWidgetClassLoaded(className) then return nil end
 	local widgets = M.find_all_instances(className, false)
 	if widgets ~= nil and M.getValid(pawn) ~= nil then
 		local widgetTreeClass = M.get_class("Class /Script/UMG.WidgetTree")
@@ -4055,6 +4239,7 @@ function M.getActiveWidgetByClass(className)
 		return fallback
 	end
 end
+M.getActiveWidgetByClass = M.profiler:wrap("getActiveWidgetByClass", M.getActiveWidgetByClass)
 
 function M.createWidget(className, playerController)
 	local widget = nil
@@ -4541,7 +4726,7 @@ end
 function hook_function(class_name, function_name, native, prefn, postfn, dbgout)
 	if(dbgout) then M.print("[hook_function] " .. class_name .. "   " .. function_name) end
     local result = false
-    local class_obj = uevr.api:find_uobject(class_name)
+    local class_obj = uevrLib.find_required_object(class_name) -- uevr.api:find_uobject(class_name)
 	local class_fn = nil
     if(class_obj ~= nil) then
         if dbgout then M.print("[hook_function] Found class obj for " .. class_name) end
