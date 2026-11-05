@@ -8,6 +8,7 @@ A VR first person mod for UEVR when playing FateKeeper
 - Articulated and animated hands
 - Option to attach the UI to head movement
 - Physical Melee
+- Physical Item Grab
 
 ## Options:
 You can configure various options in the FateKeeper Config tab in UEVR. A list of all the controller actions mappings is also included there
